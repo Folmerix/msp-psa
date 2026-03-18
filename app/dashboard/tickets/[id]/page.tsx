@@ -19,6 +19,7 @@ type TimeEntry = {
   id: string;
   minutes: number;
   notes: string | null;
+  billable: boolean;
   created_at: string;
   profiles: { full_name: string } | null;
 };
@@ -32,6 +33,7 @@ export default function TicketDetailPage() {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [logMinutes, setLogMinutes] = useState("");
   const [logNotes, setLogNotes] = useState("");
+  const [logBillable, setLogBillable] = useState(true);
   const [logLoading, setLogLoading] = useState(false);
 
   async function loadTicket() {
@@ -46,7 +48,7 @@ export default function TicketDetailPage() {
   async function loadTime() {
     const { data } = await supabase
       .from("time_entries")
-      .select("id, minutes, notes, created_at, profiles(full_name)")
+      .select("id, minutes, notes, billable, created_at, profiles(full_name)")
       .eq("ticket_id", id)
       .order("created_at", { ascending: false });
     setTimeEntries((data as unknown as TimeEntry[]) ?? []);
@@ -72,20 +74,23 @@ export default function TicketDetailPage() {
       user_id: session.session?.user.id,
       minutes: parseInt(logMinutes),
       notes: logNotes || null,
+      billable: logBillable,
     });
     setLogMinutes("");
     setLogNotes("");
+    setLogBillable(true);
     setLogLoading(false);
     loadTime();
   }
 
   const totalMinutes = timeEntries.reduce((sum, e) => sum + e.minutes, 0);
+  const billableMinutes = timeEntries.filter(e => e.billable).reduce((sum, e) => sum + e.minutes, 0);
 
   if (!ticket) return <div className="p-6 text-sm text-gray-400">Loading...</div>;
 
   return (
     <div className="p-6 max-w-3xl">
-      <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 text-sm mb-4 block">
+      <button type="button" onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 text-sm mb-4 block">
         ← Back
       </button>
 
@@ -127,12 +132,13 @@ export default function TicketDetailPage() {
       <div className="bg-white rounded-xl border p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold">Time Entries</h2>
-          <span className="text-sm text-gray-500">
-            Total: {Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m
-          </span>
+          <div className="text-sm text-gray-500 text-right">
+            <span>Total: {Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m</span>
+            <span className="ml-3 text-green-600">Billable: {Math.floor(billableMinutes / 60)}h {billableMinutes % 60}m</span>
+          </div>
         </div>
 
-        <form onSubmit={logTime} className="flex gap-3 mb-5">
+        <form onSubmit={logTime} className="flex gap-3 mb-5 items-center">
           <input
             type="number"
             min="1"
@@ -149,6 +155,15 @@ export default function TicketDetailPage() {
             onChange={(e) => setLogNotes(e.target.value)}
             className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
           />
+          <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={logBillable}
+              onChange={(e) => setLogBillable(e.target.checked)}
+              className="rounded"
+            />
+            Billable
+          </label>
           <button
             type="submit"
             disabled={logLoading}
@@ -164,9 +179,13 @@ export default function TicketDetailPage() {
           <div className="space-y-2">
             {timeEntries.map((e) => (
               <div key={e.id} className="flex items-center justify-between text-sm py-2 border-b last:border-0">
-                <div>
+                <div className="flex items-center gap-2">
                   <span className="font-medium">{e.profiles?.full_name ?? "—"}</span>
-                  {e.notes && <span className="text-gray-500 ml-2">{e.notes}</span>}
+                  {e.notes && <span className="text-gray-500">{e.notes}</span>}
+                  {e.billable
+                    ? <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Billable</span>
+                    : <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Non-billable</span>
+                  }
                 </div>
                 <div className="text-right text-gray-500">
                   <span>{Math.floor(e.minutes / 60)}h {e.minutes % 60}m</span>
