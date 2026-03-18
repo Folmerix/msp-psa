@@ -33,6 +33,7 @@ export default function NewInvoicePage() {
       .from("time_entries")
       .select("id, minutes, notes, tickets!inner(title, client_id)")
       .eq("billable", true)
+      .is("invoice_id", null)
       .eq("tickets.client_id", clientId)
       .then(({ data }) => {
         setBillableTime((data as unknown as TimeEntry[]) ?? []);
@@ -102,6 +103,14 @@ export default function NewInvoicePage() {
 
     if (lineItems.length > 0) {
       await supabase.from("invoice_items").insert(lineItems);
+    }
+
+    // Mark time entries as billed
+    if (billableTime.length > 0 && parseFloat(hourlyRate) > 0) {
+      await supabase
+        .from("time_entries")
+        .update({ invoice_id: invoice.id })
+        .in("id", billableTime.map((e) => e.id));
     }
 
     router.push(`/dashboard/invoices/${invoice.id}`);

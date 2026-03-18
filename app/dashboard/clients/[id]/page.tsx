@@ -22,6 +22,14 @@ type Ticket = {
   created_at: string;
 };
 
+type Contract = {
+  id: string;
+  name: string;
+  amount: number;
+  status: string;
+  last_billed_at: string | null;
+};
+
 const statusColors: Record<string, string> = {
   open: "bg-red-100 text-red-700",
   in_progress: "bg-yellow-100 text-yellow-700",
@@ -34,6 +42,7 @@ export default function ClientDetailPage() {
   const router = useRouter();
   const [client, setClient] = useState<Client | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "" });
   const [saving, setSaving] = useState(false);
@@ -57,6 +66,13 @@ export default function ClientDetailPage() {
       .eq("client_id", id)
       .order("created_at", { ascending: false })
       .then(({ data }) => setTickets((data as Ticket[]) ?? []));
+
+    supabase
+      .from("contracts")
+      .select("id, name, amount, status, last_billed_at")
+      .eq("client_id", id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setContracts((data as Contract[]) ?? []));
   }, [id]);
 
   function setField(field: string, value: string) {
@@ -131,6 +147,45 @@ export default function ClientDetailPage() {
             <div><p className="text-gray-400">Email</p><p>{client.email ?? "—"}</p></div>
             <div><p className="text-gray-400">Phone</p><p>{client.phone ?? "—"}</p></div>
             <div className="col-span-2"><p className="text-gray-400">Address</p><p>{client.address ?? "—"}</p></div>
+          </div>
+        )}
+      </div>
+
+      {/* Contracts */}
+      <div className="bg-white rounded-xl border p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold">Contracts</h2>
+          <Link
+            href={`/dashboard/contracts/new?client=${id}`}
+            className="text-sm bg-black text-white px-3 py-1.5 rounded-lg hover:bg-gray-800"
+          >
+            + New Contract
+          </Link>
+        </div>
+        {contracts.length === 0 ? (
+          <p className="text-sm text-gray-400">No contracts for this client.</p>
+        ) : (
+          <div className="space-y-2">
+            {contracts.map((c) => (
+              <div key={c.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                <div>
+                  <p className="text-sm font-medium">{c.name}</p>
+                  <p className="text-xs text-gray-400">
+                    Last billed: {c.last_billed_at ? new Date(c.last_billed_at + "T12:00:00").toLocaleDateString() : "Never"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium">${c.amount.toFixed(2)}/mo</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                    c.status === "active" ? "bg-green-100 text-green-700" :
+                    c.status === "paused" ? "bg-yellow-100 text-yellow-700" :
+                    "bg-gray-100 text-gray-500"
+                  }`}>
+                    {c.status}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
