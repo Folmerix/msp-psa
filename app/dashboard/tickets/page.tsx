@@ -44,7 +44,7 @@ export default function TicketsPage() {
         ? await query
         : await query.eq("status", filter);
 
-      setTickets((data as Ticket[]) ?? []);
+      setTickets((data as unknown as Ticket[]) ?? []);
       setLoading(false);
     }
     load();

@@ -40,7 +40,7 @@ export default function TicketDetailPage() {
       .select("id, title, description, status, priority, created_at, clients(name), profiles!tickets_assigned_to_fkey(full_name)")
       .eq("id", id)
       .single();
-    setTicket(data as Ticket);
+    setTicket(data as unknown as Ticket);
   }
 
   async function loadTime() {
@@ -49,7 +49,7 @@ export default function TicketDetailPage() {
       .select("id, minutes, notes, created_at, profiles(full_name)")
       .eq("ticket_id", id)
       .order("created_at", { ascending: false });
-    setTimeEntries((data as TimeEntry[]) ?? []);
+    setTimeEntries((data as unknown as TimeEntry[]) ?? []);
   }
 
   useEffect(() => {
