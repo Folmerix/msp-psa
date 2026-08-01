@@ -107,9 +107,9 @@ export default function NewQuotePage() {
   const cityStateZip = [company?.company_city, company?.company_state, company?.company_zip].filter(Boolean).join(", ");
 
   return (
-    <div className="flex h-full">
+    <div className="flex items-start">
       {/* ── LEFT: Form ── */}
-      <div className="w-[480px] flex-shrink-0 overflow-y-auto border-r bg-gray-50">
+      <div className="w-[420px] flex-shrink-0 border-r bg-gray-50">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
             <button type="button" onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 text-sm">← Back</button>
@@ -228,7 +228,7 @@ export default function NewQuotePage() {
       </div>
 
       {/* ── RIGHT: Live Preview ── */}
-      <div className="flex-1 overflow-y-auto bg-gray-300 p-6">
+      <div className="flex-1 bg-gray-300 p-6" style={{ position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
         <p className="text-xs text-gray-500 text-center mb-4 font-semibold uppercase tracking-wider">Live Preview</p>
         <div style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.15)", borderRadius: 8, overflow: "hidden", fontFamily: "Arial, sans-serif", fontSize: 12, color: "#333" }}>
 
