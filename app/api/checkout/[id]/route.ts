@@ -29,7 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!secretKey) return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
 
     const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(secretKey, { apiVersion: "2025-06-30.basil" });
+    const stripe = new Stripe(secretKey, { apiVersion: "2026-07-29.dahlia" });
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],

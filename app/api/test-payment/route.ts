@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     if (provider === "stripe") {
       if (!config.stripe_secret_key) return NextResponse.json({ ok: false, message: "No secret key provided" });
       const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(config.stripe_secret_key, { apiVersion: "2025-06-30.basil" });
+      const stripe = new Stripe(config.stripe_secret_key, { apiVersion: "2026-07-29.dahlia" });
       await stripe.balance.retrieve();
       return NextResponse.json({ ok: true, message: "✓ Stripe connected successfully" });
     }
