@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -38,6 +38,10 @@ type Company = {
 const BLUE = "#1a3d6e";
 
 export default function PublicInvoicePage() {
+  return <Suspense><PublicInvoiceContent /></Suspense>;
+}
+
+function PublicInvoiceContent() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const justPaid = searchParams.get("paid") === "1";

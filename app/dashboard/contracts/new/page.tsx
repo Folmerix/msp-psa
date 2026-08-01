@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Client = { id: string; name: string };
 
 export default function NewContractPage() {
+  return <Suspense><NewContractForm /></Suspense>;
+}
+
+function NewContractForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledClient = searchParams.get("client") ?? "";

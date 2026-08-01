@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -36,6 +36,10 @@ type Company = {
 const BLUE = "#1a3d6e";
 
 export default function PublicQuotePage() {
+  return <Suspense><PublicQuoteContent /></Suspense>;
+}
+
+function PublicQuoteContent() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const [quote, setQuote] = useState<Quote | null>(null);
