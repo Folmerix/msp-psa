@@ -35,9 +35,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="h-screen flex overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-56 bg-gray-900 text-white flex flex-col">
+      <aside className="w-56 bg-gray-900 text-white flex flex-col flex-shrink-0">
         <div className="px-5 py-5 border-b border-gray-700">
           <span className="font-semibold text-sm">MSP Platform</span>
         </div>

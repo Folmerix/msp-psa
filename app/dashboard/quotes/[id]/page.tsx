@@ -76,20 +76,17 @@ export default function QuoteDetailPage() {
   }
 
   function copyLink() {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
-    navigator.clipboard.writeText(`${appUrl}/q/${id}`);
+    navigator.clipboard.writeText(`${window.location.origin}/q/${id}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
   function openPublicView() {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
-    window.open(`${appUrl}/q/${id}`, "_blank");
+    window.open(`${window.location.origin}/q/${id}`, "_blank");
   }
 
   function printPDF() {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
-    window.open(`${appUrl}/q/${id}?print=1`, "_blank");
+    window.open(`${window.location.origin}/q/${id}?print=1`, "_blank");
   }
 
   async function handleSendEmail() {
