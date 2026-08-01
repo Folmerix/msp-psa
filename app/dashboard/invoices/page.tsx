@@ -6,10 +6,11 @@ import { supabase } from "@/lib/supabase";
 
 type Invoice = {
   id: string;
+  invoice_number: string;
   status: string;
-  issue_date: string;
   due_date: string | null;
   total: number;
+  title: string | null;
   clients: { name: string } | null;
 };
 
@@ -17,6 +18,8 @@ const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600",
   sent: "bg-blue-100 text-blue-700",
   paid: "bg-green-100 text-green-700",
+  overdue: "bg-red-100 text-red-700",
+  cancelled: "bg-gray-100 text-gray-400",
 };
 
 export default function InvoicesPage() {
@@ -26,7 +29,7 @@ export default function InvoicesPage() {
   useEffect(() => {
     supabase
       .from("invoices")
-      .select("id, status, issue_date, due_date, total, clients(name)")
+      .select("id, invoice_number, status, due_date, total, title, clients(name)")
       .order("created_at", { ascending: false })
       .then(({ data }) => {
         setInvoices((data as unknown as Invoice[]) ?? []);
@@ -35,7 +38,7 @@ export default function InvoicesPage() {
   }, []);
 
   const totalOutstanding = invoices
-    .filter(i => i.status !== "paid")
+    .filter(i => i.status === "sent" || i.status === "overdue")
     .reduce((sum, i) => sum + (i.total ?? 0), 0);
 
   return (
@@ -66,9 +69,9 @@ export default function InvoicesPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Invoice #</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Client</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Issue Date</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Due Date</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
               </tr>
@@ -78,16 +81,18 @@ export default function InvoicesPage() {
                 <tr key={inv.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <Link href={`/dashboard/invoices/${inv.id}`} className="font-medium hover:underline">
-                      {inv.clients?.name ?? "—"}
+                      {inv.invoice_number}
                     </Link>
                   </td>
+                  <td className="px-4 py-3 text-gray-600">{inv.clients?.name ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[inv.status]}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[inv.status] ?? "bg-gray-100 text-gray-600"}`}>
                       {inv.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(inv.issue_date).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-gray-500">{inv.due_date ? new Date(inv.due_date).toLocaleDateString() : "—"}</td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {inv.due_date ? new Date(inv.due_date).toLocaleDateString() : "—"}
+                  </td>
                   <td className="px-4 py-3 text-right font-medium">${(inv.total ?? 0).toFixed(2)}</td>
                 </tr>
               ))}

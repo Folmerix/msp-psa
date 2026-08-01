@@ -7,25 +7,21 @@ import { supabase } from "@/lib/supabase";
 type Client = { id: string; name: string };
 type LineItem = { item_name: string; description: string; quantity: string; unit_price: string };
 
-export default function NewInvoicePage() {
+export default function NewQuotePage() {
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState("");
   const [title, setTitle] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [validUntil, setValidUntil] = useState("");
   const [taxRate, setTaxRate] = useState("0");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<LineItem[]>([{ item_name: "", description: "", quantity: "1", unit_price: "" }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [defaultPaymentLink, setDefaultPaymentLink] = useState("");
 
   useEffect(() => {
     supabase.from("clients").select("id, name").eq("active", true).order("name").then(({ data }) => {
       setClients((data as Client[]) ?? []);
-    });
-    supabase.from("company_settings").select("default_payment_link").limit(1).maybeSingle().then(({ data }) => {
-      if (data?.default_payment_link) setDefaultPaymentLink(data.default_payment_link);
     });
   }, []);
 
@@ -44,6 +40,7 @@ export default function NewInvoicePage() {
   const subtotal = items.reduce((sum, item) => {
     return sum + (parseFloat(item.quantity || "0") * parseFloat(item.unit_price || "0"));
   }, 0);
+
   const taxAmount = subtotal * (parseFloat(taxRate || "0") / 100);
   const total = subtotal + taxAmount;
 
@@ -52,31 +49,30 @@ export default function NewInvoicePage() {
     setLoading(true);
     setError("");
 
-    const { data: nextNum } = await supabase.rpc("next_document_number", { doc_type: "invoice" });
-    const invoiceNumber = `INV-${String(nextNum).padStart(4, "0")}`;
+    const { data: nextNum } = await supabase.rpc("next_document_number", { doc_type: "quote" });
+    const quoteNumber = `QT-${String(nextNum).padStart(4, "0")}`;
 
     const { data: { user } } = await supabase.auth.getUser();
 
-    const { data: invoice, error: invoiceError } = await supabase
-      .from("invoices")
+    const { data: quote, error: quoteError } = await supabase
+      .from("quotes")
       .insert({
-        invoice_number: invoiceNumber,
+        quote_number: quoteNumber,
         client_id: clientId || null,
         title: title || null,
-        due_date: dueDate || null,
+        valid_until: validUntil || null,
         notes: notes || null,
         subtotal,
         tax_rate: parseFloat(taxRate || "0"),
         tax_amount: taxAmount,
         total,
         created_by: user?.id ?? null,
-        payment_link: defaultPaymentLink || null,
       })
       .select()
       .single();
 
-    if (invoiceError || !invoice) {
-      setError(invoiceError?.message ?? "Failed to create invoice");
+    if (quoteError || !quote) {
+      setError(quoteError?.message ?? "Failed to create quote");
       setLoading(false);
       return;
     }
@@ -85,7 +81,7 @@ export default function NewInvoicePage() {
     if (validItems.length > 0) {
       await supabase.from("line_items").insert(
         validItems.map((item, idx) => ({
-          invoice_id: invoice.id,
+          quote_id: quote.id,
           item_name: item.item_name || null,
           description: item.description || item.item_name,
           quantity: parseFloat(item.quantity),
@@ -95,14 +91,14 @@ export default function NewInvoicePage() {
       );
     }
 
-    router.push(`/dashboard/invoices/${invoice.id}`);
+    router.push(`/dashboard/quotes/${quote.id}`);
   }
 
   return (
     <div className="p-6 max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
         <button type="button" onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 text-sm">← Back</button>
-        <h1 className="text-xl font-semibold">New Invoice</h1>
+        <h1 className="text-xl font-semibold">New Quote</h1>
       </div>
 
       {error && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>}
@@ -129,15 +125,15 @@ export default function NewInvoicePage() {
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Monthly IT Support - August"
+              placeholder="e.g. Network Upgrade Proposal"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="dueDate" className="block text-sm font-medium mb-1">Due Date</label>
-              <input id="dueDate" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+              <label htmlFor="validUntil" className="block text-sm font-medium mb-1">Valid Until</label>
+              <input id="validUntil" type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
             </div>
             <div>
@@ -233,7 +229,7 @@ export default function NewInvoicePage() {
           disabled={loading}
           className="w-full bg-black text-white rounded-lg py-2.5 text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
         >
-          {loading ? "Creating..." : "Create Invoice"}
+          {loading ? "Creating..." : "Create Quote"}
         </button>
       </form>
     </div>
