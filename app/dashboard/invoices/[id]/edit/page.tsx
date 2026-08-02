@@ -217,9 +217,9 @@ export default function EditInvoicePage() {
 
       {/* ── PREVIEW ── */}
       <div className="w-[400px] flex-shrink-0 border-l border-gray-200 bg-gray-100 overflow-y-auto" style={{ position: "sticky", top: 0, height: "100vh" }}>
-        <div className="px-4 pt-6 pb-4">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-4">Live Preview</p>
-          <div style={{ overflow: "hidden", borderRadius: 6, boxShadow: "0 2px 16px rgba(0,0,0,0.12)" }}>
+        <div className="pt-5 pb-4">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-3">Live Preview</p>
+          <div style={{ overflow: "hidden", boxShadow: "0 1px 8px rgba(0,0,0,0.10)" }}>
             <div style={{ width: 850, zoom: 0.47, background: "white", fontFamily: "Arial, sans-serif", fontSize: 12, color: "#333" }}>
 
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "24px 32px 16px" }}>
