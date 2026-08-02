@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-type Client = { id: string; name: string };
+const BLUE = "#1a3d6e";
+
+type Client = { id: string; name: string; email: string | null; phone: string | null; address: string | null; city: string | null; state: string | null; zip: string | null };
 type LineItem = { item_name: string; description: string; quantity: string; unit_price: string };
+type Company = { company_name: string | null; company_email: string | null; company_phone: string | null; company_address: string | null; company_city: string | null; company_state: string | null; company_zip: string | null; logo_url: string | null; default_notes: string | null };
 
 export default function EditInvoicePage() {
   const { id } = useParams<{ id: string }>();
@@ -20,181 +23,281 @@ export default function EditInvoicePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [company, setCompany] = useState<Company | null>(null);
+  const [showAddClient, setShowAddClient] = useState(false);
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientEmail, setNewClientEmail] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
+  const [addingClient, setAddingClient] = useState(false);
 
   useEffect(() => {
     Promise.all([
-      supabase.from("clients").select("id, name").eq("active", true).order("name"),
+      supabase.from("clients").select("id, name, email, phone, address, city, state, zip").eq("active", true).order("name"),
       supabase.from("invoices").select("client_id, title, due_date, tax_rate, notes").eq("id", id).single(),
       supabase.from("line_items").select("item_name, description, quantity, unit_price").eq("invoice_id", id).order("sort_order"),
-    ]).then(([clientsRes, invoiceRes, itemsRes]) => {
-      setClients((clientsRes.data as Client[]) ?? []);
-      if (invoiceRes.data) {
-        const inv = invoiceRes.data;
-        setClientId(inv.client_id ?? "");
-        setTitle(inv.title ?? "");
-        setDueDate(inv.due_date ?? "");
-        setTaxRate(String(inv.tax_rate ?? 0));
-        setNotes(inv.notes ?? "");
-      }
-      if (itemsRes.data && itemsRes.data.length > 0) {
-        setItems(itemsRes.data.map(i => ({
-          item_name: i.item_name ?? "",
-          description: i.description ?? "",
-          quantity: String(i.quantity),
-          unit_price: String(i.unit_price),
-        })));
-      }
+      supabase.from("company_settings").select("company_name, company_email, company_phone, company_address, company_city, company_state, company_zip, logo_url, default_notes").limit(1).maybeSingle(),
+    ]).then(([cl, inv, li, co]) => {
+      setClients((cl.data as Client[]) ?? []);
+      setCompany(co.data as Company | null);
+      if (inv.data) { setClientId(inv.data.client_id ?? ""); setTitle(inv.data.title ?? ""); setDueDate(inv.data.due_date ?? ""); setTaxRate(String(inv.data.tax_rate ?? 0)); setNotes(inv.data.notes ?? ""); }
+      if (li.data && li.data.length > 0) setItems(li.data.map(i => ({ item_name: i.item_name ?? "", description: i.description ?? "", quantity: String(i.quantity), unit_price: String(i.unit_price) })));
       setLoading(false);
     });
   }, [id]);
 
-  function addItem() {
-    setItems([...items, { item_name: "", description: "", quantity: "1", unit_price: "" }]);
+  const selectedClient = clients.find(c => c.id === clientId) ?? null;
+  const companyName = company?.company_name || "Your Company";
+  const cityStateZip = [company?.company_city, company?.company_state, company?.company_zip].filter(Boolean).join(", ");
+
+  async function handleAddClient() {
+    if (!newClientName.trim()) return;
+    setAddingClient(true);
+    const { data } = await supabase.from("clients")
+      .insert({ name: newClientName.trim(), email: newClientEmail || null, phone: newClientPhone || null, active: true })
+      .select("id, name, email, phone, address, city, state, zip").single();
+    if (data) {
+      const nc = data as Client;
+      setClients(prev => [...prev, nc].sort((a, b) => a.name.localeCompare(b.name)));
+      setClientId(nc.id);
+    }
+    setNewClientName(""); setNewClientEmail(""); setNewClientPhone("");
+    setShowAddClient(false); setAddingClient(false);
   }
 
-  function removeItem(i: number) {
-    setItems(items.filter((_, idx) => idx !== i));
-  }
+  function addItem() { setItems(p => [...p, { item_name: "", description: "", quantity: "1", unit_price: "" }]); }
+  function removeItem(i: number) { setItems(p => p.filter((_, idx) => idx !== i)); }
+  function updateItem(i: number, field: string, value: string) { setItems(p => p.map((item, idx) => idx === i ? { ...item, [field]: value } : item)); }
 
-  function updateItem(i: number, field: string, value: string) {
-    setItems(items.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
-  }
-
-  const subtotal = items.reduce((sum, item) =>
-    sum + (parseFloat(item.quantity || "0") * parseFloat(item.unit_price || "0")), 0);
+  const subtotal = items.reduce((s, i) => s + parseFloat(i.quantity || "0") * parseFloat(i.unit_price || "0"), 0);
   const taxAmount = subtotal * (parseFloat(taxRate || "0") / 100);
   const total = subtotal + taxAmount;
 
   async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError("");
-
-    const { error: updateError } = await supabase.from("invoices").update({
-      client_id: clientId || null,
-      title: title || null,
-      due_date: dueDate || null,
-      notes: notes || null,
-      subtotal,
-      tax_rate: parseFloat(taxRate || "0"),
-      tax_amount: taxAmount,
-      total,
-      updated_at: new Date().toISOString(),
+    e.preventDefault(); setSaving(true); setError("");
+    const { error: uErr } = await supabase.from("invoices").update({
+      client_id: clientId || null, title: title || null, due_date: dueDate || null, notes: notes || null,
+      subtotal, tax_rate: parseFloat(taxRate || "0"), tax_amount: taxAmount, total, updated_at: new Date().toISOString(),
     }).eq("id", id);
-
-    if (updateError) {
-      setError(updateError.message);
-      setSaving(false);
-      return;
-    }
-
+    if (uErr) { setError(uErr.message); setSaving(false); return; }
     await supabase.from("line_items").delete().eq("invoice_id", id);
-    const validItems = items.filter(i => (i.item_name || i.description) && i.unit_price);
-    if (validItems.length > 0) {
-      await supabase.from("line_items").insert(
-        validItems.map((item, idx) => ({
-          invoice_id: id,
-          item_name: item.item_name || null,
-          description: item.description || item.item_name,
-          quantity: parseFloat(item.quantity),
-          unit_price: parseFloat(item.unit_price),
-          sort_order: idx,
-        }))
-      );
-    }
-
+    const valid = items.filter(i => (i.item_name || i.description) && i.unit_price);
+    if (valid.length > 0) await supabase.from("line_items").insert(valid.map((item, idx) => ({ invoice_id: id, item_name: item.item_name || null, description: item.description || item.item_name, quantity: parseFloat(item.quantity), unit_price: parseFloat(item.unit_price), sort_order: idx })));
     router.push(`/dashboard/invoices/${id}`);
   }
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading...</div>;
+  if (loading) return <div className="p-8 text-sm text-gray-400">Loading…</div>;
+
+  const inputCls = "w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
+  const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
 
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <button type="button" onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 text-sm">← Back</button>
-        <h1 className="text-xl font-semibold">Edit Invoice</h1>
+    <div className="flex h-full bg-gray-50">
+
+      {/* ── FORM ── */}
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <div className="px-8 py-8">
+
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 transition">
+                <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              </button>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">Invoices</p>
+                <h1 className="text-xl font-bold text-gray-900">Edit Invoice</h1>
+              </div>
+            </div>
+            <button type="button" onClick={handleSave as unknown as React.MouseEventHandler} disabled={saving}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition shadow-sm">
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+
+          {error && <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>}
+
+          <div className="space-y-6">
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
+              <h2 className="text-sm font-bold text-gray-700 border-b pb-3">Client & Details</h2>
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className={labelCls}>Client</label>
+                  <select value={clientId} onChange={e => setClientId(e.target.value)} className={inputCls}>
+                    <option value="">— No client —</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  {!showAddClient ? (
+                    <button type="button" onClick={() => setShowAddClient(true)} className="mt-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium">+ Add new client</button>
+                  ) : (
+                    <div className="mt-3 p-4 bg-blue-50 border border-blue-100 rounded-lg space-y-3">
+                      <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Quick Add Client</p>
+                      <input type="text" placeholder="Company / Name *" value={newClientName} onChange={e => setNewClientName(e.target.value)} className={inputCls} />
+                      <div className="grid grid-cols-2 gap-3">
+                        <input type="email" placeholder="Email" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} className={inputCls} />
+                        <input type="tel" placeholder="Phone" value={newClientPhone} onChange={e => setNewClientPhone(e.target.value)} className={inputCls} />
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={handleAddClient} disabled={!newClientName.trim() || addingClient}
+                          className="bg-blue-600 text-white rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-50">{addingClient ? "Adding…" : "Add Client"}</button>
+                        <button type="button" onClick={() => setShowAddClient(false)} className="border border-gray-200 rounded-lg px-4 py-2 text-xs text-gray-500 hover:bg-gray-50">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>Project / Title</label>
+                  <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Monthly IT Support" className={inputCls} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className={labelCls}>Due Date</label>
+                  <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Tax Rate (%)</label>
+                  <input type="number" min="0" max="100" step="0.01" value={taxRate} onChange={e => setTaxRate(e.target.value)} className={inputCls} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+              <h2 className="text-sm font-bold text-gray-700 border-b pb-3 mb-4">Line Items</h2>
+              <div className="grid grid-cols-[1fr_80px_120px_36px] gap-3 mb-2 px-1">
+                <span className={labelCls}>Item / Description</span>
+                <span className={`${labelCls} text-center`}>Qty</span>
+                <span className={`${labelCls} text-right`}>Unit Price</span>
+                <span />
+              </div>
+              <div className="space-y-3">
+                {items.map((item, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_80px_120px_36px] gap-3 items-start">
+                    <div className="space-y-1.5">
+                      <input type="text" placeholder="Item name" value={item.item_name} onChange={e => updateItem(i, "item_name", e.target.value)} className={inputCls} />
+                      <input type="text" placeholder="Description (optional)" value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
+                        className="w-full border border-gray-100 rounded-lg px-3.5 py-2 text-xs text-gray-500 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50" />
+                    </div>
+                    <input type="number" placeholder="1" value={item.quantity} min="0" step="1" onChange={e => updateItem(i, "quantity", e.target.value)}
+                      className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500 w-full" />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">$</span>
+                      <input type="number" placeholder="0.00" value={item.unit_price} step="0.01" onChange={e => updateItem(i, "unit_price", e.target.value)}
+                        className="border border-gray-200 rounded-lg pl-7 pr-3 py-2.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500 w-full" />
+                    </div>
+                    <button type="button" onClick={() => removeItem(i)} disabled={items.length === 1}
+                      className="mt-1 text-gray-300 hover:text-red-400 transition disabled:opacity-0 text-lg font-light leading-none">×</button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addItem}
+                className="mt-4 flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium transition">
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                Add line item
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <label className={labelCls}>Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} placeholder="Payment terms, special instructions…"
+                  className={inputCls + " resize-none"} />
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
+                  {parseFloat(taxRate) > 0 && <div className="flex justify-between text-sm text-gray-500"><span>Tax ({taxRate}%)</span><span>${taxAmount.toFixed(2)}</span></div>}
+                  <div className="flex justify-between text-base font-bold text-gray-900 border-t border-gray-100 pt-3 mt-1"><span>Total</span><span>${total.toFixed(2)}</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
 
-      {error && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>}
+      {/* ── PREVIEW ── */}
+      <div className="w-[400px] flex-shrink-0 border-l border-gray-200 bg-gray-100 overflow-y-auto" style={{ position: "sticky", top: 0, height: "100vh" }}>
+        <div className="px-4 pt-6 pb-4">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mb-4">Live Preview</p>
+          <div style={{ overflow: "hidden", borderRadius: 6, boxShadow: "0 2px 16px rgba(0,0,0,0.12)" }}>
+            <div style={{ width: 850, zoom: 0.47, background: "white", fontFamily: "Arial, sans-serif", fontSize: 12, color: "#333" }}>
 
-      <form onSubmit={handleSave} className="space-y-5">
-        <div className="bg-white rounded-xl border p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Client</label>
-            <select value={clientId} onChange={e => setClientId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black">
-              <option value="">— No client —</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Title</label>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Monthly IT Support - August"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Due Date</label>
-              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Tax Rate (%)</label>
-              <input type="number" min="0" max="100" step="0.01" value={taxRate} onChange={e => setTaxRate(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Notes</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border p-6">
-          <h2 className="font-semibold mb-3">Line Items</h2>
-          <div className="space-y-3 mb-3">
-            <div className="grid grid-cols-[1fr_1fr_64px_96px_32px] gap-2 text-xs font-medium text-gray-400 px-1">
-              <span>Item</span><span>Description</span><span className="text-center">Qty</span><span className="text-center">Price</span><span />
-            </div>
-            {items.map((item, i) => (
-              <div key={i} className="grid grid-cols-[1fr_1fr_64px_96px_32px] gap-2 items-start">
-                <input type="text" placeholder="Item name" value={item.item_name}
-                  onChange={e => updateItem(i, "item_name", e.target.value)}
-                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                <input type="text" placeholder="Details (optional)" value={item.description}
-                  onChange={e => updateItem(i, "description", e.target.value)}
-                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                <input type="number" placeholder="1" value={item.quantity} min="0" step="0.01"
-                  onChange={e => updateItem(i, "quantity", e.target.value)}
-                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black text-center" />
-                <input type="number" placeholder="0.00" value={item.unit_price} step="0.01"
-                  onChange={e => updateItem(i, "unit_price", e.target.value)}
-                  className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                <button type="button" onClick={() => removeItem(i)} disabled={items.length === 1}
-                  className="text-gray-300 hover:text-red-400 text-lg leading-none disabled:opacity-0 pt-2">✕</button>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "24px 32px 16px" }}>
+                <div>{company?.logo_url ? <img src={company.logo_url} alt={companyName} style={{ height: 52, maxWidth: 220, objectFit: "contain" }} /> : <span style={{ fontSize: 22, fontWeight: 900, color: BLUE, letterSpacing: 2 }}>{companyName.toUpperCase()}</span>}</div>
+                <div style={{ textAlign: "right" }}><p style={{ fontSize: 26, fontWeight: 900, color: BLUE, letterSpacing: 3, margin: 0 }}>INVOICE</p><p style={{ fontSize: 10, color: "#aaa", fontStyle: "italic", margin: "2px 0 0" }}>Live preview</p></div>
               </div>
-            ))}
-          </div>
-          <button type="button" onClick={addItem} className="text-sm text-gray-500 hover:text-black">+ Add line</button>
-        </div>
 
-        <div className="bg-white rounded-xl border p-5">
-          <div className="space-y-1 text-sm text-right">
-            <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
-            {parseFloat(taxRate) > 0 && (
-              <div className="flex justify-between text-gray-500"><span>Tax ({taxRate}%)</span><span>${taxAmount.toFixed(2)}</span></div>
-            )}
-            <div className="flex justify-between font-bold text-base border-t pt-2 mt-2"><span>Total</span><span>${total.toFixed(2)}</span></div>
+              <div style={{ display: "flex", gap: 24, padding: "0 32px 16px" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ backgroundColor: BLUE, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>FROM</div>
+                  <p style={{ fontWeight: 700, fontSize: 13, margin: "0 0 2px" }}>{companyName}</p>
+                  {company?.company_address && <p style={{ margin: "1px 0", color: "#555" }}>{company.company_address}</p>}
+                  {cityStateZip && <p style={{ margin: "1px 0", color: "#555" }}>{cityStateZip}</p>}
+                  {company?.company_phone && <p style={{ margin: "1px 0", color: "#555" }}>{company.company_phone}</p>}
+                  {company?.company_email && <p style={{ margin: "1px 0", color: BLUE }}>{company.company_email}</p>}
+                </div>
+                <div style={{ width: 220 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", border: `1px solid #c8d5e4`, fontSize: 11 }}><tbody>
+                    <tr><td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, padding: "3px 8px", width: 80 }}>Invoice #</td><td style={{ padding: "3px 8px", borderBottom: "1px solid #e5eaf0", color: "#aaa", fontStyle: "italic" }}>Editing…</td></tr>
+                    <tr><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "3px 8px", borderBottom: "1px solid #c8d5e4" }}>Date</td><td style={{ padding: "3px 8px", borderBottom: "1px solid #e5eaf0" }}>{new Date().toLocaleDateString()}</td></tr>
+                    {dueDate && <tr><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "3px 8px", borderBottom: "1px solid #c8d5e4" }}>Due Date</td><td style={{ padding: "3px 8px" }}>{new Date(dueDate + "T12:00:00").toLocaleDateString()}</td></tr>}
+                  </tbody></table>
+                </div>
+              </div>
+
+              <div style={{ padding: "0 32px 16px" }}>
+                <div style={{ backgroundColor: BLUE, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>BILL TO</div>
+                {selectedClient ? <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{selectedClient.name}</p> : <p style={{ color: "#ccc", fontSize: 11, margin: 0, fontStyle: "italic" }}>No client selected</p>}
+                {title && <p style={{ fontWeight: 600, color: "#333", margin: "4px 0 0" }}>{title}</p>}
+              </div>
+
+              <div style={{ padding: "0 32px 16px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead><tr style={{ backgroundColor: BLUE, color: "white" }}>
+                    <th style={{ textAlign: "left", padding: "5px 8px", width: "22%" }}>Item</th>
+                    <th style={{ textAlign: "left", padding: "5px 8px" }}>Description</th>
+                    <th style={{ textAlign: "center", padding: "5px 8px", width: "6%" }}>Qty</th>
+                    <th style={{ textAlign: "right", padding: "5px 8px", width: "13%" }}>Unit Price</th>
+                    <th style={{ textAlign: "right", padding: "5px 8px", width: "13%" }}>Amount</th>
+                  </tr></thead>
+                  <tbody>
+                    {items.filter(i => i.item_name || i.description).length === 0
+                      ? <tr><td colSpan={5} style={{ textAlign: "center", padding: "20px 8px", color: "#ddd", fontStyle: "italic" }}>Add line items on the left</td></tr>
+                      : items.filter(i => i.item_name || i.description).map((item, i) => {
+                        const qty = parseFloat(item.quantity || "0"), price = parseFloat(item.unit_price || "0");
+                        return <tr key={i} style={{ borderBottom: "1px solid #e5eaf0", backgroundColor: i % 2 === 0 ? "white" : "#f7f9fc" }}>
+                          <td style={{ padding: "6px 8px", fontWeight: 600, color: BLUE, verticalAlign: "top" }}>{item.item_name || item.description}</td>
+                          <td style={{ padding: "6px 8px", color: "#555", verticalAlign: "top" }}>{item.item_name ? item.description : ""}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "center", verticalAlign: "top" }}>{item.quantity}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", verticalAlign: "top" }}>${price.toFixed(2)}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right", verticalAlign: "top" }}>${(qty * price).toFixed(2)}</td>
+                        </tr>;
+                      })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: "flex", gap: 24, padding: "0 32px 28px" }}>
+                <div style={{ flex: 1 }}>
+                  {(notes || company?.default_notes) && <>
+                    <div style={{ backgroundColor: BLUE, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>Notes / Terms</div>
+                    {notes && <p style={{ fontSize: 10, color: "#444", margin: "0 0 2px" }}>{notes}</p>}
+                    {company?.default_notes && <p style={{ fontSize: 10, color: "#666", margin: 0 }}>{company.default_notes}</p>}
+                  </>}
+                </div>
+                <div style={{ width: 210 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}><tbody>
+                    <tr style={{ borderBottom: "1px solid #e5eaf0" }}><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "4px 8px" }}>Subtotal</td><td style={{ padding: "4px 8px", textAlign: "right" }}>${subtotal.toFixed(2)}</td></tr>
+                    {parseFloat(taxRate) > 0 && <tr style={{ borderBottom: "1px solid #e5eaf0" }}><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "4px 8px" }}>Tax ({taxRate}%)</td><td style={{ padding: "4px 8px", textAlign: "right" }}>${taxAmount.toFixed(2)}</td></tr>}
+                    <tr><td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, fontSize: 13, padding: "5px 8px" }}>TOTAL</td><td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, fontSize: 13, padding: "5px 8px", textAlign: "right" }}>${total.toFixed(2)}</td></tr>
+                  </tbody></table>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
-
-        <button type="submit" disabled={saving}
-          className="w-full bg-black text-white rounded-lg py-2.5 text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
-          {saving ? "Saving..." : "Save Changes"}
-        </button>
-      </form>
+      </div>
     </div>
   );
 }
