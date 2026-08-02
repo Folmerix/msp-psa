@@ -33,9 +33,8 @@ type Company = {
   company_name: string | null; company_email: string | null; company_phone: string | null;
   company_address: string | null; company_city: string | null; company_state: string | null;
   company_zip: string | null; logo_url: string | null; payment_terms: string | null; default_notes: string | null;
+  primary_color: string | null; secondary_color: string | null; accent_color: string | null;
 };
-
-const BLUE = "#1a3d6e";
 
 export default function PublicInvoicePage() {
   return <Suspense><PublicInvoiceContent /></Suspense>;
@@ -54,7 +53,7 @@ function PublicInvoiceContent() {
     Promise.all([
       supabase.from("invoices").select("id, invoice_number, status, due_date, subtotal, tax_rate, tax_amount, total, notes, title, created_at, paid_at, payment_link, clients(name, email, phone, address, city, state, zip)").eq("id", id).single(),
       supabase.from("line_items").select("id, item_name, description, quantity, unit_price, total").eq("invoice_id", id).order("sort_order"),
-      supabase.from("company_settings").select("company_name, company_email, company_phone, company_address, company_city, company_state, company_zip, logo_url, payment_terms, default_notes").limit(1).maybeSingle(),
+      supabase.from("company_settings").select("company_name, company_email, company_phone, company_address, company_city, company_state, company_zip, logo_url, payment_terms, default_notes, primary_color, secondary_color, accent_color").limit(1).maybeSingle(),
     ]).then(([inv, li, cs]) => {
       if (!inv.data) { setNotFound(true); return; }
       setInvoice(inv.data as unknown as Invoice);
@@ -68,6 +67,9 @@ function PublicInvoiceContent() {
   if (!invoice) return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Loading...</div>;
 
   const co = company;
+  const P = co?.primary_color || "#1a3d6e";
+  const S = co?.secondary_color || "#e8edf4";
+  const A = co?.accent_color || "#3b82f6";
   const companyName = co?.company_name || "Trevikon IT";
   const cityStateZip = [co?.company_city, co?.company_state, co?.company_zip].filter(Boolean).join(", ");
   const clientCityState = [invoice.clients?.city, invoice.clients?.state, invoice.clients?.zip].filter(Boolean).join(", ");
@@ -86,7 +88,7 @@ function PublicInvoiceContent() {
           .doc { box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; }
         }
         @page { margin: 0.4in; size: letter; }
-        .cell-label { background-color: #e8edf4; font-weight: 600; font-size: 11px; padding: 4px 8px; border-bottom: 1px solid #c8d5e4; }
+        .cell-label { background-color: ${S}; font-weight: 600; font-size: 11px; padding: 4px 8px; border-bottom: 1px solid #c8d5e4; }
         .cell-value { font-size: 11px; padding: 4px 8px; border-bottom: 1px solid #e5eaf0; }
       `}</style>
 
@@ -109,12 +111,12 @@ function PublicInvoiceContent() {
             <div>
               {co?.logo_url
                 ? <img src={co.logo_url} alt={companyName} style={{ height: 64, maxWidth: 260, objectFit: "contain" }} />
-                : <span style={{ fontSize: 32, fontWeight: 900, color: BLUE, letterSpacing: 2 }}>{companyName.toUpperCase()}</span>
+                : <span style={{ fontSize: 32, fontWeight: 900, color: P, letterSpacing: 2 }}>{companyName.toUpperCase()}</span>
               }
             </div>
             <div className="text-right">
               <div className="flex items-center justify-end gap-3">
-                <p style={{ fontSize: 32, fontWeight: 900, color: BLUE, letterSpacing: 3, lineHeight: 1 }}>INVOICE</p>
+                <p style={{ fontSize: 32, fontWeight: 900, color: P, letterSpacing: 3, lineHeight: 1 }}>INVOICE</p>
                 {isPaid && (
                   <span style={{ backgroundColor: "#16a34a", color: "white", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 4 }}>PAID</span>
                 )}
@@ -128,19 +130,19 @@ function PublicInvoiceContent() {
           {/* ── FROM + Invoice Info ── */}
           <div className="flex gap-6 px-8 pb-5">
             <div className="flex-1">
-              <div style={{ backgroundColor: BLUE, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>FROM</div>
+              <div style={{ backgroundColor: P, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>FROM</div>
               <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{companyName}</p>
               {co?.company_address && <p style={{ fontSize: 12, color: "#333" }}>{co.company_address}</p>}
               {cityStateZip && <p style={{ fontSize: 12, color: "#333" }}>{cityStateZip}</p>}
               {co?.company_phone && <p style={{ fontSize: 12, color: "#333" }}>{co.company_phone}</p>}
-              {co?.company_email && <p style={{ fontSize: 12, color: BLUE }}>{co.company_email}</p>}
+              {co?.company_email && <p style={{ fontSize: 12, color: A }}>{co.company_email}</p>}
             </div>
 
             <div style={{ width: 280 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", border: `1px solid #c8d5e4`, fontSize: 12 }}>
                 <tbody>
                   <tr>
-                    <td className="cell-label" style={{ backgroundColor: BLUE, color: "white", width: 100 }}>Invoice #</td>
+                    <td className="cell-label" style={{ backgroundColor: P, color: "white", width: 100 }}>Invoice #</td>
                     <td className="cell-value" style={{ fontWeight: 600 }}>{invoice.invoice_number}</td>
                   </tr>
                   <tr>
@@ -158,7 +160,7 @@ function PublicInvoiceContent() {
                   <tr>
                     <td className="cell-label">Contact</td>
                     <td className="cell-value">
-                      {co?.company_email && <div style={{ color: BLUE }}>{co.company_email}</div>}
+                      {co?.company_email && <div style={{ color: A }}>{co.company_email}</div>}
                       {co?.company_phone && <div>{co.company_phone}</div>}
                     </td>
                   </tr>
@@ -170,21 +172,21 @@ function PublicInvoiceContent() {
           {/* ── BILL TO + PROJECT ── */}
           <div className="flex gap-6 px-8 pb-6">
             <div className="flex-1">
-              <div style={{ backgroundColor: BLUE, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>BILL TO</div>
+              <div style={{ backgroundColor: P, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>BILL TO</div>
               {invoice.clients ? (
                 <>
                   <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{invoice.clients.name}</p>
                   {invoice.clients.address && <p style={{ fontSize: 12, color: "#333" }}>{invoice.clients.address}</p>}
                   {clientCityState && <p style={{ fontSize: 12, color: "#333" }}>{clientCityState}</p>}
                   {invoice.clients.phone && <p style={{ fontSize: 12, color: "#333" }}>{invoice.clients.phone}</p>}
-                  {invoice.clients.email && <p style={{ fontSize: 12, color: BLUE }}>{invoice.clients.email}</p>}
+                  {invoice.clients.email && <p style={{ fontSize: 12, color: A }}>{invoice.clients.email}</p>}
                 </>
               ) : (
                 <p style={{ fontSize: 12, color: "#999" }}>—</p>
               )}
             </div>
             <div style={{ width: 280 }}>
-              <div style={{ backgroundColor: BLUE, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>PROJECT / DESCRIPTION</div>
+              <div style={{ backgroundColor: P, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>PROJECT / DESCRIPTION</div>
               {invoice.title && <p style={{ fontWeight: 700, fontSize: 13 }}>{invoice.title}</p>}
             </div>
           </div>
@@ -193,7 +195,7 @@ function PublicInvoiceContent() {
           <div className="px-8 pb-6">
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ backgroundColor: BLUE, color: "white" }}>
+                <tr style={{ backgroundColor: P, color: "white" }}>
                   <th style={{ textAlign: "left", padding: "6px 10px", width: "22%" }}>Item</th>
                   <th style={{ textAlign: "left", padding: "6px 10px" }}>Description</th>
                   <th style={{ textAlign: "center", padding: "6px 10px", width: "6%" }}>Qty</th>
@@ -204,7 +206,7 @@ function PublicInvoiceContent() {
               <tbody>
                 {items.map((item, i) => (
                   <tr key={item.id} style={{ borderBottom: "1px solid #e5eaf0", backgroundColor: i % 2 === 0 ? "white" : "#f7f9fc" }}>
-                    <td style={{ padding: "8px 10px", fontWeight: 600, color: BLUE, verticalAlign: "top" }}>
+                    <td style={{ padding: "8px 10px", fontWeight: 600, color: P, verticalAlign: "top" }}>
                       {item.item_name || item.description}
                     </td>
                     <td style={{ padding: "8px 10px", color: "#555", verticalAlign: "top", lineHeight: 1.4 }}>
@@ -233,7 +235,7 @@ function PublicInvoiceContent() {
             <div className="flex-1">
               {allNotes.length > 0 && (
                 <>
-                  <div style={{ backgroundColor: BLUE, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>Notes / Terms</div>
+                  <div style={{ backgroundColor: P, color: "white", fontSize: 11, fontWeight: 700, padding: "3px 8px", marginBottom: 6 }}>Notes / Terms</div>
                   <ul style={{ margin: 0, paddingLeft: 16 }}>
                     {allNotes.map((n, i) => (
                       <li key={i} style={{ fontSize: 11, color: "#444", marginBottom: 3, lineHeight: 1.4 }}>{n}</li>
@@ -264,8 +266,8 @@ function PublicInvoiceContent() {
                     <td className="cell-value" style={{ textAlign: "right" }}>${invoice.tax_amount.toFixed(2)}</td>
                   </tr>
                   <tr>
-                    <td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, fontSize: 13, padding: "6px 8px" }}>TOTAL</td>
-                    <td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, fontSize: 13, padding: "6px 8px", textAlign: "right" }}>${invoice.total.toFixed(2)}</td>
+                    <td style={{ backgroundColor: P, color: "white", fontWeight: 700, fontSize: 13, padding: "6px 8px" }}>TOTAL</td>
+                    <td style={{ backgroundColor: P, color: "white", fontWeight: 700, fontSize: 13, padding: "6px 8px", textAlign: "right" }}>${invoice.total.toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -279,7 +281,7 @@ function PublicInvoiceContent() {
                 href={`/api/checkout/${invoice.id}`}
                 style={{
                   display: "inline-block",
-                  backgroundColor: BLUE,
+                  backgroundColor: P,
                   color: "white",
                   fontWeight: 700,
                   fontSize: 15,

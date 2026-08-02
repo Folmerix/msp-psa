@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const BLUE = "#1a3d6e";
-
 type Client = { id: string; name: string; email: string | null; phone: string | null; address: string | null; city: string | null; state: string | null; zip: string | null };
 type LineItem = { item_name: string; description: string; quantity: string; unit_price: string };
-type Company = { company_name: string | null; company_email: string | null; company_phone: string | null; company_address: string | null; company_city: string | null; company_state: string | null; company_zip: string | null; logo_url: string | null; default_notes: string | null };
+type Company = { company_name: string | null; company_email: string | null; company_phone: string | null; company_address: string | null; company_city: string | null; company_state: string | null; company_zip: string | null; logo_url: string | null; default_notes: string | null; primary_color: string | null; secondary_color: string | null; accent_color: string | null };
 
 export default function NewInvoicePage() {
   const router = useRouter();
@@ -31,7 +29,7 @@ export default function NewInvoicePage() {
   useEffect(() => {
     Promise.all([
       supabase.from("clients").select("id, name, email, phone, address, city, state, zip").eq("active", true).order("name"),
-      supabase.from("company_settings").select("company_name, company_email, company_phone, company_address, company_city, company_state, company_zip, logo_url, default_notes").limit(1).maybeSingle(),
+      supabase.from("company_settings").select("company_name, company_email, company_phone, company_address, company_city, company_state, company_zip, logo_url, default_notes, primary_color, secondary_color, accent_color").limit(1).maybeSingle(),
     ]).then(([c, co]) => {
       setClients((c.data as Client[]) ?? []);
       setCompany(co.data as Company | null);
@@ -41,6 +39,9 @@ export default function NewInvoicePage() {
   const selectedClient = clients.find(c => c.id === clientId) ?? null;
   const companyName = company?.company_name || "Your Company";
   const cityStateZip = [company?.company_city, company?.company_state, company?.company_zip].filter(Boolean).join(", ");
+  const docP = company?.primary_color || "#1a3d6e";
+  const docS = company?.secondary_color || "#e8edf4";
+  const docA = company?.accent_color || "#3b82f6";
 
   async function handleAddClient() {
     if (!newClientName.trim()) return;
@@ -234,36 +235,36 @@ export default function NewInvoicePage() {
                 <div>
                   {company?.logo_url
                     ? <img src={company.logo_url} alt={companyName} style={{ height: 52, maxWidth: 220, objectFit: "contain" }} />
-                    : <span style={{ fontSize: 22, fontWeight: 900, color: BLUE, letterSpacing: 2 }}>{companyName.toUpperCase()}</span>}
+                    : <span style={{ fontSize: 22, fontWeight: 900, color: docP, letterSpacing: 2 }}>{companyName.toUpperCase()}</span>}
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <p style={{ fontSize: 26, fontWeight: 900, color: BLUE, letterSpacing: 3, margin: 0 }}>INVOICE</p>
+                  <p style={{ fontSize: 26, fontWeight: 900, color: docP, letterSpacing: 3, margin: 0 }}>INVOICE</p>
                   <p style={{ fontSize: 10, color: "#aaa", fontStyle: "italic", margin: "2px 0 0" }}>Preview</p>
                 </div>
               </div>
 
               <div style={{ display: "flex", gap: 24, padding: "0 32px 16px" }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ backgroundColor: BLUE, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>FROM</div>
+                  <div style={{ backgroundColor: docP, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>FROM</div>
                   <p style={{ fontWeight: 700, fontSize: 13, margin: "0 0 2px" }}>{companyName}</p>
                   {company?.company_address && <p style={{ margin: "1px 0", color: "#555" }}>{company.company_address}</p>}
                   {cityStateZip && <p style={{ margin: "1px 0", color: "#555" }}>{cityStateZip}</p>}
                   {company?.company_phone && <p style={{ margin: "1px 0", color: "#555" }}>{company.company_phone}</p>}
-                  {company?.company_email && <p style={{ margin: "1px 0", color: BLUE }}>{company.company_email}</p>}
+                  {company?.company_email && <p style={{ margin: "1px 0", color: docA }}>{company.company_email}</p>}
                 </div>
                 <div style={{ width: 220 }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", border: `1px solid #c8d5e4`, fontSize: 11 }}>
                     <tbody>
-                      <tr><td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, padding: "3px 8px", width: 80 }}>Invoice #</td><td style={{ padding: "3px 8px", borderBottom: "1px solid #e5eaf0", color: "#aaa", fontStyle: "italic" }}>Draft</td></tr>
-                      <tr><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "3px 8px", borderBottom: "1px solid #c8d5e4" }}>Date</td><td style={{ padding: "3px 8px", borderBottom: "1px solid #e5eaf0" }}>{new Date().toLocaleDateString()}</td></tr>
-                      {dueDate && <tr><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "3px 8px", borderBottom: "1px solid #c8d5e4" }}>Due Date</td><td style={{ padding: "3px 8px" }}>{new Date(dueDate + "T12:00:00").toLocaleDateString()}</td></tr>}
+                      <tr><td style={{ backgroundColor: docP, color: "white", fontWeight: 700, padding: "3px 8px", width: 80 }}>Invoice #</td><td style={{ padding: "3px 8px", borderBottom: "1px solid #e5eaf0", color: "#aaa", fontStyle: "italic" }}>Draft</td></tr>
+                      <tr><td style={{ backgroundColor: docS, fontWeight: 600, padding: "3px 8px", borderBottom: "1px solid #c8d5e4" }}>Date</td><td style={{ padding: "3px 8px", borderBottom: "1px solid #e5eaf0" }}>{new Date().toLocaleDateString()}</td></tr>
+                      {dueDate && <tr><td style={{ backgroundColor: docS, fontWeight: 600, padding: "3px 8px", borderBottom: "1px solid #c8d5e4" }}>Due Date</td><td style={{ padding: "3px 8px" }}>{new Date(dueDate + "T12:00:00").toLocaleDateString()}</td></tr>}
                     </tbody>
                   </table>
                 </div>
               </div>
 
               <div style={{ padding: "0 32px 16px" }}>
-                <div style={{ backgroundColor: BLUE, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>BILL TO</div>
+                <div style={{ backgroundColor: docP, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>BILL TO</div>
                 {selectedClient ? <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{selectedClient.name}</p> : <p style={{ color: "#ccc", fontSize: 11, margin: 0, fontStyle: "italic" }}>No client selected</p>}
                 {title && <p style={{ fontWeight: 600, color: "#333", margin: "4px 0 0" }}>{title}</p>}
               </div>
@@ -271,7 +272,7 @@ export default function NewInvoicePage() {
               <div style={{ padding: "0 32px 16px" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                   <thead>
-                    <tr style={{ backgroundColor: BLUE, color: "white" }}>
+                    <tr style={{ backgroundColor: docP, color: "white" }}>
                       <th style={{ textAlign: "left", padding: "5px 8px", width: "22%" }}>Item</th>
                       <th style={{ textAlign: "left", padding: "5px 8px" }}>Description</th>
                       <th style={{ textAlign: "center", padding: "5px 8px", width: "6%" }}>Qty</th>
@@ -287,7 +288,7 @@ export default function NewInvoicePage() {
                       const price = parseFloat(item.unit_price || "0");
                       return (
                         <tr key={i} style={{ borderBottom: "1px solid #e5eaf0", backgroundColor: i % 2 === 0 ? "white" : "#f7f9fc" }}>
-                          <td style={{ padding: "6px 8px", fontWeight: 600, color: BLUE, verticalAlign: "top" }}>{item.item_name || item.description}</td>
+                          <td style={{ padding: "6px 8px", fontWeight: 600, color: docP, verticalAlign: "top" }}>{item.item_name || item.description}</td>
                           <td style={{ padding: "6px 8px", color: "#555", verticalAlign: "top" }}>{item.item_name ? item.description : ""}</td>
                           <td style={{ padding: "6px 8px", textAlign: "center", verticalAlign: "top" }}>{item.quantity}</td>
                           <td style={{ padding: "6px 8px", textAlign: "right", verticalAlign: "top" }}>${price.toFixed(2)}</td>
@@ -302,7 +303,7 @@ export default function NewInvoicePage() {
               <div style={{ display: "flex", gap: 24, padding: "0 32px 28px" }}>
                 <div style={{ flex: 1 }}>
                   {(notes || company?.default_notes) && <>
-                    <div style={{ backgroundColor: BLUE, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>Notes / Terms</div>
+                    <div style={{ backgroundColor: docP, color: "white", fontSize: 10, fontWeight: 700, padding: "2px 8px", marginBottom: 4 }}>Notes / Terms</div>
                     {notes && <p style={{ fontSize: 10, color: "#444", margin: "0 0 2px" }}>{notes}</p>}
                     {company?.default_notes && <p style={{ fontSize: 10, color: "#666", margin: 0 }}>{company.default_notes}</p>}
                   </>}
@@ -310,9 +311,9 @@ export default function NewInvoicePage() {
                 <div style={{ width: 210 }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                     <tbody>
-                      <tr style={{ borderBottom: "1px solid #e5eaf0" }}><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "4px 8px" }}>Subtotal</td><td style={{ padding: "4px 8px", textAlign: "right" }}>${subtotal.toFixed(2)}</td></tr>
-                      {parseFloat(taxRate) > 0 && <tr style={{ borderBottom: "1px solid #e5eaf0" }}><td style={{ backgroundColor: "#e8edf4", fontWeight: 600, padding: "4px 8px" }}>Tax ({taxRate}%)</td><td style={{ padding: "4px 8px", textAlign: "right" }}>${taxAmount.toFixed(2)}</td></tr>}
-                      <tr><td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, fontSize: 13, padding: "5px 8px" }}>TOTAL</td><td style={{ backgroundColor: BLUE, color: "white", fontWeight: 700, fontSize: 13, padding: "5px 8px", textAlign: "right" }}>${total.toFixed(2)}</td></tr>
+                      <tr style={{ borderBottom: "1px solid #e5eaf0" }}><td style={{ backgroundColor: docS, fontWeight: 600, padding: "4px 8px" }}>Subtotal</td><td style={{ padding: "4px 8px", textAlign: "right" }}>${subtotal.toFixed(2)}</td></tr>
+                      {parseFloat(taxRate) > 0 && <tr style={{ borderBottom: "1px solid #e5eaf0" }}><td style={{ backgroundColor: docS, fontWeight: 600, padding: "4px 8px" }}>Tax ({taxRate}%)</td><td style={{ padding: "4px 8px", textAlign: "right" }}>${taxAmount.toFixed(2)}</td></tr>}
+                      <tr><td style={{ backgroundColor: docP, color: "white", fontWeight: 700, fontSize: 13, padding: "5px 8px" }}>TOTAL</td><td style={{ backgroundColor: docP, color: "white", fontWeight: 700, fontSize: 13, padding: "5px 8px", textAlign: "right" }}>${total.toFixed(2)}</td></tr>
                     </tbody>
                   </table>
                 </div>
