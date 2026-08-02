@@ -244,7 +244,8 @@ export default function EditQuotePage() {
       {/* ── RIGHT: Live Preview ── */}
       <div className="flex-1 bg-gray-300 p-6" style={{ position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
         <p className="text-xs text-gray-500 text-center mb-4 font-semibold uppercase tracking-wider">Live Preview</p>
-        <div style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.15)", borderRadius: 8, overflow: "hidden", fontFamily: "Arial, sans-serif", fontSize: 12, color: "#333" }}>
+        <div style={{ maxWidth: 510, margin: "0 auto", overflowX: "hidden" }}>
+        <div style={{ width: 850, zoom: 0.6, background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.15)", borderRadius: 8, overflow: "hidden", fontFamily: "Arial, sans-serif", fontSize: 12, color: "#333" }}>
 
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "24px 32px 16px" }}>
             <div>
@@ -361,6 +362,7 @@ export default function EditQuotePage() {
               </table>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
