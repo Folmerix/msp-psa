@@ -102,7 +102,7 @@ export default function SubscriptionsPage() {
       await supabase.from("line_items").insert(
         clientSubs.map((s, idx) => ({
           invoice_id: inv.id,
-          item_name: s.vendor ? `${s.vendor} — ${s.product_name}` : s.product_name,
+          item_name: (s.vendor && s.vendor !== "") ? `${s.vendor} — ${s.product_name}` : s.product_name,
           description: s.type === "managed_service"
             ? s.product_name
             : `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
@@ -258,7 +258,7 @@ export default function SubscriptionsPage() {
                             {s.type === "managed_service" ? "Service" : "License"}
                           </span>
                         </div>
-                        {s.vendor && <p className="text-xs text-gray-400 mt-0.5">{s.vendor}</p>}
+                        {s.vendor ? <p className="text-xs text-gray-400 mt-0.5">{s.vendor}</p> : null}
                       </td>
                       <td className="px-6 py-4 text-right text-gray-700">{s.seats}</td>
                       <td className="px-6 py-4 text-right text-gray-500">${s.cost_per_seat.toFixed(2)}</td>

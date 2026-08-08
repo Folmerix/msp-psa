@@ -171,7 +171,7 @@ export default function ClientDetailPage() {
                         {s.type === "managed_service" ? "Service" : "License"}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{s.vendor ? `${s.vendor} · ` : ""}{s.seats} seat{s.seats !== 1 ? "s" : ""}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{(s.vendor && s.vendor !== "") ? `${s.vendor} · ` : ""}{s.seats} seat{s.seats !== 1 ? "s" : ""}</p>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-semibold text-gray-900">${(s.seats * s.price_per_seat).toFixed(2)}/mo</span>

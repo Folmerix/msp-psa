@@ -56,7 +56,7 @@ function NewSubscriptionForm() {
     const { error } = await supabase.from("subscriptions").insert({
       client_id: form.client_id || null,
       type: form.type,
-      vendor: isSoftware ? form.vendor : null,
+      vendor: isSoftware ? form.vendor : "",
       product_name: form.product_name,
       seats: parseInt(form.seats),
       cost_per_seat: isSoftware ? parseFloat(form.cost_per_seat) : 0,
