@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 type Client = { id: string; name: string; email: string | null; phone: string | null; address: string | null; city: string | null; state: string | null; zip: string | null; active: boolean };
 type Ticket = { id: string; title: string; status: string; priority: string; created_at: string };
 type Contract = { id: string; name: string; amount: number; status: string; last_billed_at: string | null };
+type Subscription = { id: string; vendor: string; product_name: string; seats: number; price_per_seat: number; status: string };
 
 const ticketStatusColors: Record<string, string> = {
   open: "bg-red-100 text-red-700",
@@ -25,6 +26,7 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", city: "", state: "", zip: "" });
   const [saving, setSaving] = useState(false);
@@ -40,6 +42,8 @@ export default function ClientDetailPage() {
       .then(({ data }) => setTickets((data as Ticket[]) ?? []));
     supabase.from("contracts").select("id, name, amount, status, last_billed_at").eq("client_id", id).order("created_at", { ascending: false })
       .then(({ data }) => setContracts((data as Contract[]) ?? []));
+    supabase.from("subscriptions").select("id, vendor, product_name, seats, price_per_seat, status").eq("client_id", id).eq("status", "active").order("vendor")
+      .then(({ data }) => setSubscriptions((data as Subscription[]) ?? []));
   }, [id]);
 
   async function handleSave(e: React.FormEvent) {
@@ -135,6 +139,42 @@ export default function ClientDetailPage() {
                 </div>
               </div>
             </>
+          )}
+        </div>
+
+        {/* Subscriptions */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div>
+              <h2 className="text-sm font-bold text-gray-700">Active Subscriptions</h2>
+              {subscriptions.length > 0 && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  ${subscriptions.reduce((s, sub) => s + sub.seats * sub.price_per_seat, 0).toFixed(2)}/month
+                </p>
+              )}
+            </div>
+            <Link href={`/dashboard/subscriptions/new?client=${id}`}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+              + Add Subscription
+            </Link>
+          </div>
+          {subscriptions.length === 0 ? (
+            <div className="px-6 py-6 text-center text-sm text-gray-400">No active subscriptions for this client.</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {subscriptions.map(s => (
+                <div key={s.id} className="flex items-center justify-between px-6 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{s.product_name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{s.vendor} · {s.seats} seat{s.seats !== 1 ? "s" : ""}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-semibold text-gray-900">${(s.seats * s.price_per_seat).toFixed(2)}/mo</span>
+                    <Link href={`/dashboard/subscriptions/${s.id}/edit`} className="text-xs text-gray-400 hover:text-blue-600 transition">Edit</Link>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
