@@ -32,6 +32,7 @@ function NewSubscriptionForm() {
     seats: "1",
     cost_per_seat: "",
     price_per_seat: "",
+    discount_percent: "",
     billing_day: "1",
     start_date: new Date().toISOString().split("T")[0],
     notes: "",
@@ -47,8 +48,11 @@ function NewSubscriptionForm() {
   const seats = parseFloat(form.seats || "0");
   const cost = parseFloat(form.cost_per_seat || "0");
   const price = parseFloat(form.price_per_seat || "0");
+  const discount = parseFloat(form.discount_percent || "0");
   const monthlyCost = seats * cost;
-  const monthlyRevenue = seats * price;
+  const grossRevenue = seats * price;
+  const discountAmount = grossRevenue * (discount / 100);
+  const monthlyRevenue = grossRevenue - discountAmount;
   const monthlyMargin = monthlyRevenue - monthlyCost;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -61,6 +65,7 @@ function NewSubscriptionForm() {
       seats: parseInt(form.seats),
       cost_per_seat: isSoftware ? parseFloat(form.cost_per_seat) : 0,
       price_per_seat: parseFloat(form.price_per_seat),
+      discount_percent: parseFloat(form.discount_percent) || 0,
       billing_day: parseInt(form.billing_day),
       start_date: form.start_date,
       notes: form.notes || null,
@@ -165,14 +170,36 @@ function NewSubscriptionForm() {
                 </div>
               )}
               <div>
-                <label className={labelCls}>{isSoftware ? "Client Price / Seat *" : "Monthly Price *"}</label>
+                <label className={labelCls}>{isSoftware ? "List Price / Seat *" : "Monthly Price *"}</label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
                   <input type="number" min="0" step="0.01" value={form.price_per_seat} onChange={e => setForm(f => ({ ...f, price_per_seat: e.target.value }))} required className={inputCls + " pl-7"} placeholder="0.00" />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">What you charge the client</p>
+                <p className="text-xs text-gray-400 mt-1">Full price before any discount</p>
               </div>
             </div>
+
+            {/* Discount (software only) */}
+            {isSoftware && (
+              <div className="grid grid-cols-3 gap-5">
+                <div>
+                  <label className={labelCls}>MSP Discount %</label>
+                  <div className="relative">
+                    <input type="number" min="0" max="100" step="0.1" value={form.discount_percent} onChange={e => setForm(f => ({ ...f, discount_percent: e.target.value }))} className={inputCls + " pr-7"} placeholder="0" />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Discount for MSP clients (leave blank for none)</p>
+                </div>
+                {discount > 0 && (
+                  <div className="col-span-2 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 flex items-center gap-3">
+                    <svg width="16" height="16" fill="none" stroke="#d97706" strokeWidth="2" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    <p className="text-sm text-amber-800">
+                      Client pays <strong>${(price - price * discount / 100).toFixed(2)}/seat</strong> (saves ${(price * discount / 100).toFixed(2)}/seat · ${discountAmount.toFixed(2)}/mo total)
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Live margin preview */}
             {(cost > 0 || price > 0) && (
@@ -184,8 +211,9 @@ function NewSubscriptionForm() {
                   </div>
                 )}
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Monthly Revenue</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Net Revenue</p>
                   <p className="font-bold text-blue-600">${monthlyRevenue.toFixed(2)}</p>
+                  {discount > 0 && <p className="text-xs text-gray-400 mt-0.5 line-through">${grossRevenue.toFixed(2)}</p>}
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{isSoftware ? "Monthly Margin" : "Pure Margin"}</p>

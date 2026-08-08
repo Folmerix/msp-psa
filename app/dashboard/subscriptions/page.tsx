@@ -13,6 +13,7 @@ type Subscription = {
   seats: number;
   cost_per_seat: number;
   price_per_seat: number;
+  discount_percent: number;
   billing_day: number;
   start_date: string;
   status: string;
@@ -33,7 +34,7 @@ export default function SubscriptionsPage() {
   async function load() {
     const { data } = await supabase
       .from("subscriptions")
-      .select("id, type, vendor, product_name, seats, cost_per_seat, price_per_seat, billing_day, start_date, status, last_billed_at, notes, clients(id, name)")
+      .select("id, type, vendor, product_name, seats, cost_per_seat, price_per_seat, discount_percent, billing_day, start_date, status, last_billed_at, notes, clients(id, name)")
       .order("vendor").order("product_name");
     setSubs((data as unknown as Subscription[]) ?? []);
     setLoading(false);
@@ -44,7 +45,8 @@ export default function SubscriptionsPage() {
   const shown = subs.filter(s => s.status === filterStatus);
   const active = subs.filter(s => s.status === "active");
 
-  const totalMRR = active.reduce((sum, s) => sum + s.seats * s.price_per_seat, 0);
+  const netRevenue = (s: Subscription) => s.seats * s.price_per_seat * (1 - (s.discount_percent || 0) / 100);
+  const totalMRR = active.reduce((sum, s) => sum + netRevenue(s), 0);
   const totalCost = active.reduce((sum, s) => sum + s.seats * s.cost_per_seat, 0);
   const totalMargin = totalMRR - totalCost;
 
@@ -78,7 +80,7 @@ export default function SubscriptionsPage() {
     for (const [clientId, clientSubs] of Object.entries(byClient)) {
       if (clientId === "no-client") { skipped += clientSubs.length; continue; }
 
-      const subtotal = clientSubs.reduce((s, sub) => s + sub.seats * sub.price_per_seat, 0);
+      const subtotal = clientSubs.reduce((s, sub) => s + netRevenue(sub), 0);
       const invoiceNumber = `INV-${String(invCounter).padStart(4, "0")}`;
       invCounter++;
 
@@ -98,20 +100,37 @@ export default function SubscriptionsPage() {
 
       if (error || !inv) { skipped++; continue; }
 
-      // Line items: one per subscription
-      await supabase.from("line_items").insert(
-        clientSubs.map((s, idx) => ({
+      // Line items: one per subscription, plus discount line if applicable
+      const lineItems: object[] = [];
+      let sortIdx = 0;
+      for (const s of clientSubs) {
+        const itemName = (s.vendor && s.vendor !== "") ? `${s.vendor} — ${s.product_name}` : s.product_name;
+        const gross = s.seats * s.price_per_seat;
+        lineItems.push({
           invoice_id: inv.id,
-          item_name: (s.vendor && s.vendor !== "") ? `${s.vendor} — ${s.product_name}` : s.product_name,
+          item_name: itemName,
           description: s.type === "managed_service"
             ? s.product_name
             : `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
           quantity: s.seats,
           unit_price: s.price_per_seat,
-          total: s.seats * s.price_per_seat,
-          sort_order: idx,
-        }))
-      );
+          total: gross,
+          sort_order: sortIdx++,
+        });
+        if (s.discount_percent && s.discount_percent > 0) {
+          const discAmt = gross * (s.discount_percent / 100);
+          lineItems.push({
+            invoice_id: inv.id,
+            item_name: `MSP Package Discount (${s.discount_percent}%)`,
+            description: `Discount applied for managed service clients`,
+            quantity: 1,
+            unit_price: -discAmt,
+            total: -discAmt,
+            sort_order: sortIdx++,
+          });
+        }
+      }
+      await supabase.from("line_items").insert(lineItems);
 
       // Mark all billed
       await supabase.from("subscriptions")
@@ -240,9 +259,11 @@ export default function SubscriptionsPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {shown.map(s => {
-                  const monthly = s.seats * s.price_per_seat;
+                  const gross = s.seats * s.price_per_seat;
+                  const monthly = netRevenue(s);
                   const cost = s.seats * s.cost_per_seat;
                   const margin = monthly - cost;
+                  const hasDiscount = s.discount_percent > 0;
                   const notBilledThisMonth = !s.last_billed_at || new Date(s.last_billed_at) < monthStart;
                   return (
                     <tr key={s.id} className="hover:bg-gray-50">
@@ -257,13 +278,28 @@ export default function SubscriptionsPage() {
                           <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${s.type === "managed_service" ? "bg-purple-100 text-purple-700" : "bg-blue-50 text-blue-600"}`}>
                             {s.type === "managed_service" ? "Service" : "License"}
                           </span>
+                          {hasDiscount && (
+                            <span className="px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
+                              {s.discount_percent}% off
+                            </span>
+                          )}
                         </div>
                         {s.vendor ? <p className="text-xs text-gray-400 mt-0.5">{s.vendor}</p> : null}
                       </td>
                       <td className="px-6 py-4 text-right text-gray-700">{s.seats}</td>
                       <td className="px-6 py-4 text-right text-gray-500">${s.cost_per_seat.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-right text-gray-700">${s.price_per_seat.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-right font-semibold text-gray-900">${monthly.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-right text-gray-700">
+                        {hasDiscount ? (
+                          <>
+                            <span className="line-through text-gray-400 text-xs">${s.price_per_seat.toFixed(2)}</span>
+                            <span className="ml-1">${(s.price_per_seat * (1 - s.discount_percent / 100)).toFixed(2)}</span>
+                          </>
+                        ) : `$${s.price_per_seat.toFixed(2)}`}
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-gray-900">
+                        ${monthly.toFixed(2)}
+                        {hasDiscount && <span className="text-xs text-gray-400 ml-1 line-through">${gross.toFixed(2)}</span>}
+                      </td>
                       <td className="px-6 py-4 text-right">
                         <span className="text-green-700 font-semibold">${margin.toFixed(2)}</span>
                         <span className="text-xs text-gray-400 ml-1">({monthly > 0 ? ((margin / monthly) * 100).toFixed(0) : 0}%)</span>
@@ -301,8 +337,8 @@ export default function SubscriptionsPage() {
             <div className="bg-gray-50 rounded-lg p-4 mb-5 space-y-1.5 max-h-48 overflow-y-auto">
               {dueToBill.map(s => (
                 <div key={s.id} className="flex justify-between text-sm">
-                  <span className="text-gray-700">{s.clients?.name ?? "—"} — {s.product_name}</span>
-                  <span className="font-semibold text-gray-900">${(s.seats * s.price_per_seat).toFixed(2)}</span>
+                  <span className="text-gray-700">{s.clients?.name ?? "—"} — {s.product_name}{s.discount_percent > 0 ? ` (${s.discount_percent}% off)` : ""}</span>
+                  <span className="font-semibold text-gray-900">${netRevenue(s).toFixed(2)}</span>
                 </div>
               ))}
             </div>
