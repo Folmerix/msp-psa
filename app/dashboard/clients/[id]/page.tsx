@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 type Client = { id: string; name: string; email: string | null; phone: string | null; address: string | null; city: string | null; state: string | null; zip: string | null; active: boolean };
 type Ticket = { id: string; title: string; status: string; priority: string; created_at: string };
 type Contract = { id: string; name: string; amount: number; status: string; last_billed_at: string | null };
-type Subscription = { id: string; vendor: string; product_name: string; seats: number; price_per_seat: number; status: string };
+type Subscription = { id: string; type: string; vendor: string | null; product_name: string; seats: number; price_per_seat: number; status: string };
 
 const ticketStatusColors: Record<string, string> = {
   open: "bg-red-100 text-red-700",
@@ -42,7 +42,7 @@ export default function ClientDetailPage() {
       .then(({ data }) => setTickets((data as Ticket[]) ?? []));
     supabase.from("contracts").select("id, name, amount, status, last_billed_at").eq("client_id", id).order("created_at", { ascending: false })
       .then(({ data }) => setContracts((data as Contract[]) ?? []));
-    supabase.from("subscriptions").select("id, vendor, product_name, seats, price_per_seat, status").eq("client_id", id).eq("status", "active").order("vendor")
+    supabase.from("subscriptions").select("id, type, vendor, product_name, seats, price_per_seat, status").eq("client_id", id).eq("status", "active").order("vendor")
       .then(({ data }) => setSubscriptions((data as Subscription[]) ?? []));
   }, [id]);
 
@@ -165,8 +165,13 @@ export default function ClientDetailPage() {
               {subscriptions.map(s => (
                 <div key={s.id} className="flex items-center justify-between px-6 py-3">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{s.product_name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{s.vendor} · {s.seats} seat{s.seats !== 1 ? "s" : ""}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{s.product_name}</p>
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${s.type === "managed_service" ? "bg-purple-100 text-purple-700" : "bg-blue-50 text-blue-600"}`}>
+                        {s.type === "managed_service" ? "Service" : "License"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{s.vendor ? `${s.vendor} · ` : ""}{s.seats} seat{s.seats !== 1 ? "s" : ""}</p>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-semibold text-gray-900">${(s.seats * s.price_per_seat).toFixed(2)}/mo</span>

@@ -7,7 +7,8 @@ import { supabase } from "@/lib/supabase";
 
 type Subscription = {
   id: string;
-  vendor: string;
+  type: string;
+  vendor: string | null;
   product_name: string;
   seats: number;
   cost_per_seat: number;
@@ -32,7 +33,7 @@ export default function SubscriptionsPage() {
   async function load() {
     const { data } = await supabase
       .from("subscriptions")
-      .select("id, vendor, product_name, seats, cost_per_seat, price_per_seat, billing_day, start_date, status, last_billed_at, notes, clients(id, name)")
+      .select("id, type, vendor, product_name, seats, cost_per_seat, price_per_seat, billing_day, start_date, status, last_billed_at, notes, clients(id, name)")
       .order("vendor").order("product_name");
     setSubs((data as unknown as Subscription[]) ?? []);
     setLoading(false);
@@ -101,8 +102,10 @@ export default function SubscriptionsPage() {
       await supabase.from("line_items").insert(
         clientSubs.map((s, idx) => ({
           invoice_id: inv.id,
-          item_name: `${s.vendor} — ${s.product_name}`,
-          description: `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
+          item_name: s.vendor ? `${s.vendor} — ${s.product_name}` : s.product_name,
+          description: s.type === "managed_service"
+            ? s.product_name
+            : `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
           quantity: s.seats,
           unit_price: s.price_per_seat,
           total: s.seats * s.price_per_seat,
@@ -225,7 +228,7 @@ export default function SubscriptionsPage() {
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Client</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Vendor / Product</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Product / Service</th>
                   <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Seats</th>
                   <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Your Cost</th>
                   <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Client Price</th>
@@ -249,8 +252,13 @@ export default function SubscriptionsPage() {
                           : <span className="text-gray-400 italic">No client</span>}
                       </td>
                       <td className="px-6 py-4">
-                        <p className="font-medium text-gray-900">{s.product_name}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{s.vendor}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">{s.product_name}</p>
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${s.type === "managed_service" ? "bg-purple-100 text-purple-700" : "bg-blue-50 text-blue-600"}`}>
+                            {s.type === "managed_service" ? "Service" : "License"}
+                          </span>
+                        </div>
+                        {s.vendor && <p className="text-xs text-gray-400 mt-0.5">{s.vendor}</p>}
                       </td>
                       <td className="px-6 py-4 text-right text-gray-700">{s.seats}</td>
                       <td className="px-6 py-4 text-right text-gray-500">${s.cost_per_seat.toFixed(2)}</td>
