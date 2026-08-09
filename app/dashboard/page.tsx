@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type FinancialSummary = {
   mrr: number;
+  vendorCosts: number;
   monthlyExpenses: number;
 };
 
@@ -30,24 +31,28 @@ export default function DashboardPage() {
       });
     });
 
-    // Financial summary: MRR from client subscriptions, monthly from expenses
+    // Financial summary: MRR and vendor costs from subscriptions, operating expenses table
     Promise.all([
-      supabase.from("subscriptions").select("seats, price_per_seat, discount_percent, status").eq("status", "active"),
-      supabase.from("expenses").select("amount, billing_cycle, status").eq("status", "active"),
+      supabase.from("subscriptions").select("seats, price_per_seat, cost_per_seat, discount_percent, status").eq("status", "active"),
+      supabase.from("expenses").select("amount, quantity, billing_cycle, status").eq("status", "active"),
     ]).then(([subs, exps]) => {
       const mrr = (subs.data ?? []).reduce((s, sub) => {
         return s + sub.seats * sub.price_per_seat * (1 - (sub.discount_percent || 0) / 100);
       }, 0);
+      const vendorCosts = (subs.data ?? []).reduce((s, sub) => {
+        return s + sub.seats * sub.cost_per_seat;
+      }, 0);
       const monthlyExpenses = (exps.data ?? []).reduce((s, exp) => {
-        if (exp.billing_cycle === "monthly") return s + exp.amount;
-        if (exp.billing_cycle === "annual") return s + exp.amount / 12;
+        const qty = exp.quantity || 1;
+        if (exp.billing_cycle === "monthly") return s + exp.amount * qty;
+        if (exp.billing_cycle === "annual") return s + (exp.amount * qty) / 12;
         return s; // one_time excluded
       }, 0);
-      setFinancial({ mrr, monthlyExpenses });
+      setFinancial({ mrr, vendorCosts, monthlyExpenses });
     });
   }, []);
 
-  const profit = financial ? financial.mrr - financial.monthlyExpenses : 0;
+  const profit = financial ? financial.mrr - financial.vendorCosts - financial.monthlyExpenses : 0;
   const margin = financial && financial.mrr > 0 ? (profit / financial.mrr) * 100 : 0;
 
   const cards = [
@@ -107,24 +112,24 @@ export default function DashboardPage() {
               <div className="px-6 py-5">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Client MRR</p>
                 <p className="text-2xl font-bold text-green-600">${financial.mrr.toFixed(2)}</p>
-                <p className="text-xs text-gray-400 mt-1">Active subscriptions</p>
+                <p className="text-xs text-gray-400 mt-1">Billed to clients</p>
               </div>
               <div className="px-6 py-5">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Monthly Expenses</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Vendor Costs</p>
+                <p className="text-2xl font-bold text-red-500">${financial.vendorCosts.toFixed(2)}</p>
+                <p className="text-xs text-gray-400 mt-1">Paid to Pax8 / vendors</p>
+              </div>
+              <div className="px-6 py-5">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Operating Expenses</p>
                 <p className="text-2xl font-bold text-red-500">${financial.monthlyExpenses.toFixed(2)}</p>
-                <p className="text-xs text-gray-400 mt-1">Operating costs</p>
+                <p className="text-xs text-gray-400 mt-1">Tools, software, etc.</p>
               </div>
               <div className="px-6 py-5">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Gross Profit</p>
                 <p className={`text-2xl font-bold ${profit >= 0 ? "text-gray-900" : "text-red-600"}`}>${profit.toFixed(2)}</p>
-                <p className="text-xs text-gray-400 mt-1">Revenue minus expenses</p>
-              </div>
-              <div className="px-6 py-5">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Margin</p>
-                <p className={`text-2xl font-bold ${margin >= 50 ? "text-green-600" : margin >= 20 ? "text-yellow-600" : "text-red-600"}`}>
-                  {financial.mrr > 0 ? `${margin.toFixed(0)}%` : "—"}
+                <p className={`text-xs mt-1 font-semibold ${margin >= 50 ? "text-green-600" : margin >= 20 ? "text-yellow-600" : "text-red-500"}`}>
+                  {financial.mrr > 0 ? `${margin.toFixed(0)}% margin` : "—"}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">After operating costs</p>
               </div>
             </div>
           )}
