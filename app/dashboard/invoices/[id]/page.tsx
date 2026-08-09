@@ -43,6 +43,7 @@ export default function InvoiceDetailPage() {
   const router = useRouter();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [items, setItems] = useState<LineItem[]>([]);
+  const [loadingInvoice, setLoadingInvoice] = useState(true);
   const [copied, setCopied] = useState(false);
   const [sendEmail, setSendEmail] = useState("");
   const [sending, setSending] = useState(false);
@@ -62,6 +63,7 @@ export default function InvoiceDetailPage() {
         setInvoice(inv);
         setSendEmail(inv?.clients?.email ?? "");
         setPaymentLink(inv?.payment_link ?? "");
+        setLoadingInvoice(false);
       });
     supabase.from("line_items").select("id, item_name, description, quantity, unit_price, total").eq("invoice_id", id).order("sort_order")
       .then(({ data }) => setItems((data as LineItem[]) ?? []));
@@ -108,7 +110,8 @@ export default function InvoiceDetailPage() {
     setSending(false);
   }
 
-  if (!invoice) return <div className="p-8 text-sm text-gray-400">Loading…</div>;
+  if (loadingInvoice) return <div className="p-8 text-sm text-gray-400">Loading…</div>;
+  if (!invoice) return <div className="p-8 text-sm text-gray-400">Invoice not found.</div>;
 
   return (
     <div className="flex flex-col h-full bg-gray-50">

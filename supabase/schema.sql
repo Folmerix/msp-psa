@@ -121,6 +121,7 @@ create table invoices (
   tax_amount numeric(10,2) default 0,
   total numeric(10,2) default 0,
   paid_at timestamptz,
+  payment_link text,
   created_by uuid references profiles(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -131,6 +132,7 @@ create table line_items (
   id uuid primary key default gen_random_uuid(),
   quote_id uuid references quotes(id) on delete cascade,
   invoice_id uuid references invoices(id) on delete cascade,
+  item_name text,
   description text not null,
   quantity numeric(10,2) default 1,
   unit_price numeric(10,2) default 0,

@@ -30,6 +30,7 @@ export default function SubscriptionsPage() {
   const [billResult, setBillResult] = useState<{ created: number; skipped: number } | null>(null);
   const [filterStatus, setFilterStatus] = useState<"active" | "cancelled">("active");
   const [showBillingModal, setShowBillingModal] = useState(false);
+  const [generatingSub, setGeneratingSub] = useState<string | null>(null);
 
   async function load() {
     const { data } = await supabase
@@ -114,7 +115,6 @@ export default function SubscriptionsPage() {
             : `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
           quantity: s.seats,
           unit_price: s.price_per_seat,
-          total: gross,
           sort_order: sortIdx++,
         });
         if (s.discount_percent && s.discount_percent > 0) {
@@ -125,12 +125,12 @@ export default function SubscriptionsPage() {
             description: `Discount applied for managed service clients`,
             quantity: 1,
             unit_price: -discAmt,
-            total: -discAmt,
             sort_order: sortIdx++,
           });
         }
       }
-      await supabase.from("line_items").insert(lineItems);
+      const { error: liError } = await supabase.from("line_items").insert(lineItems);
+      if (liError) console.error("line_items insert failed:", liError.message);
 
       // Mark all billed
       await supabase.from("subscriptions")
@@ -144,6 +144,61 @@ export default function SubscriptionsPage() {
     setBilling(false);
     setShowBillingModal(false);
     load();
+  }
+
+  async function generateSingleInvoice(s: Subscription) {
+    if (!s.clients) return;
+    setGeneratingSub(s.id);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: nextInv } = await supabase.rpc("next_document_number", { doc_type: "invoice" });
+    const invoiceNumber = `INV-${String(nextInv ?? 1).padStart(4, "0")}`;
+    const monthLabel = now.toLocaleString("default", { month: "long", year: "numeric" });
+    const amount = netRevenue(s);
+
+    const { data: inv, error } = await supabase.from("invoices").insert({
+      invoice_number: invoiceNumber,
+      client_id: s.clients.id,
+      title: `Monthly Subscriptions — ${monthLabel}`,
+      subtotal: amount,
+      tax_rate: 0,
+      tax_amount: 0,
+      total: amount,
+      status: "draft",
+      created_by: user?.id ?? null,
+    }).select().single();
+
+    if (error || !inv) { setGeneratingSub(null); return; }
+
+    const gross = s.seats * s.price_per_seat;
+    const itemName = (s.vendor && s.vendor !== "") ? `${s.vendor} — ${s.product_name}` : s.product_name;
+    const lineItems: object[] = [{
+      invoice_id: inv.id,
+      item_name: itemName,
+      description: s.type === "managed_service"
+        ? s.product_name
+        : `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
+      quantity: s.seats,
+      unit_price: s.price_per_seat,
+      sort_order: 0,
+    }];
+    if (s.discount_percent > 0) {
+      const discAmt = gross * (s.discount_percent / 100);
+      lineItems.push({
+        invoice_id: inv.id,
+        item_name: `MSP Package Discount (${s.discount_percent}%)`,
+        description: `Discount applied for managed service clients`,
+        quantity: 1,
+        unit_price: -discAmt,
+        sort_order: 1,
+      });
+    }
+    await supabase.from("line_items").insert(lineItems);
+    await supabase.from("subscriptions")
+      .update({ last_billed_at: now.toISOString().split("T")[0] })
+      .eq("id", s.id);
+
+    setGeneratingSub(null);
+    router.push(`/dashboard/invoices/${inv.id}`);
   }
 
   if (loading) return <div className="p-8 text-sm text-gray-400">Loading…</div>;
@@ -305,15 +360,37 @@ export default function SubscriptionsPage() {
                         <span className="text-xs text-gray-400 ml-1">({monthly > 0 ? ((margin / monthly) * 100).toFixed(0) : 0}%)</span>
                       </td>
                       <td className="px-6 py-4">
-                        {s.last_billed_at
-                          ? <span className={notBilledThisMonth && s.status === "active" ? "text-amber-600 font-medium" : "text-gray-500"}>
+                        {s.last_billed_at ? (
+                          <div className="flex items-center gap-2">
+                            <span className={notBilledThisMonth && s.status === "active" ? "text-amber-600 font-medium" : "text-gray-500"}>
                               {new Date(s.last_billed_at + "T12:00:00").toLocaleDateString()}
                             </span>
-                          : <span className="text-amber-600 font-medium">Never billed</span>
-                        }
+                            <button
+                              onClick={async () => {
+                                await supabase.from("subscriptions").update({ last_billed_at: null }).eq("id", s.id);
+                                load();
+                              }}
+                              className="text-xs text-gray-300 hover:text-red-400 transition"
+                              title="Reset billing date (mark as unbilled)">
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-amber-600 font-medium">Never billed</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Link href={`/dashboard/subscriptions/${s.id}/edit`} className="text-xs text-gray-400 hover:text-blue-600 font-medium transition">Edit</Link>
+                        <div className="flex items-center justify-end gap-3">
+                          {s.clients && (
+                            <button
+                              onClick={() => generateSingleInvoice(s)}
+                              disabled={generatingSub === s.id}
+                              className="text-xs text-blue-500 hover:text-blue-700 font-medium transition disabled:opacity-50">
+                              {generatingSub === s.id ? "Creating…" : "Generate Invoice"}
+                            </button>
+                          )}
+                          <Link href={`/dashboard/subscriptions/${s.id}/edit`} className="text-xs text-gray-400 hover:text-blue-600 font-medium transition">Edit</Link>
+                        </div>
                       </td>
                     </tr>
                   );
