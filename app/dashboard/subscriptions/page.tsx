@@ -75,8 +75,16 @@ export default function SubscriptionsPage() {
     let created = 0;
     let skipped = 0;
     const { data: { user } } = await supabase.auth.getUser();
-    const { data: nextInv } = await supabase.rpc("next_document_number", { doc_type: "invoice" });
-    let invCounter = nextInv ?? 1;
+    const { data: maxRow } = await supabase
+      .from("invoices")
+      .select("invoice_number")
+      .order("invoice_number", { ascending: false })
+      .limit(1)
+      .single();
+    const lastNum = maxRow?.invoice_number
+      ? parseInt(maxRow.invoice_number.replace(/\D/g, ""), 10)
+      : 0;
+    let invCounter = (isNaN(lastNum) ? 0 : lastNum) + 1;
 
     for (const [clientId, clientSubs] of Object.entries(byClient)) {
       if (clientId === "no-client") { skipped += clientSubs.length; continue; }
@@ -146,56 +154,79 @@ export default function SubscriptionsPage() {
     load();
   }
 
-  async function generateSingleInvoice(s: Subscription) {
+  async function generateClientInvoice(s: Subscription) {
     if (!s.clients) return;
-    setGeneratingSub(s.id);
+    const clientId = s.clients.id;
+
+    // All active subs for this client (combine into one invoice)
+    const clientSubs = subs.filter(sub => sub.clients?.id === clientId && sub.status === "active");
+    if (clientSubs.length === 0) return;
+
+    setGeneratingSub(clientId);
     const { data: { user } } = await supabase.auth.getUser();
-    const { data: nextInv } = await supabase.rpc("next_document_number", { doc_type: "invoice" });
-    const invoiceNumber = `INV-${String(nextInv ?? 1).padStart(4, "0")}`;
+
+    // Use max existing invoice number + 1 so deleted invoices don't leave gaps
+    const { data: maxRow } = await supabase
+      .from("invoices")
+      .select("invoice_number")
+      .order("invoice_number", { ascending: false })
+      .limit(1)
+      .single();
+    const lastNum = maxRow?.invoice_number
+      ? parseInt(maxRow.invoice_number.replace(/\D/g, ""), 10)
+      : 0;
+    const invoiceNumber = `INV-${String((isNaN(lastNum) ? 0 : lastNum) + 1).padStart(4, "0")}`;
+
     const monthLabel = now.toLocaleString("default", { month: "long", year: "numeric" });
-    const amount = netRevenue(s);
+    const subtotal = clientSubs.reduce((sum, sub) => sum + netRevenue(sub), 0);
 
     const { data: inv, error } = await supabase.from("invoices").insert({
       invoice_number: invoiceNumber,
-      client_id: s.clients.id,
+      client_id: clientId,
       title: `Monthly Subscriptions — ${monthLabel}`,
-      subtotal: amount,
+      subtotal,
       tax_rate: 0,
       tax_amount: 0,
-      total: amount,
+      total: subtotal,
       status: "draft",
       created_by: user?.id ?? null,
     }).select().single();
 
     if (error || !inv) { setGeneratingSub(null); return; }
 
-    const gross = s.seats * s.price_per_seat;
-    const itemName = (s.vendor && s.vendor !== "") ? `${s.vendor} — ${s.product_name}` : s.product_name;
-    const lineItems: object[] = [{
-      invoice_id: inv.id,
-      item_name: itemName,
-      description: s.type === "managed_service"
-        ? s.product_name
-        : `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
-      quantity: s.seats,
-      unit_price: s.price_per_seat,
-      sort_order: 0,
-    }];
-    if (s.discount_percent > 0) {
-      const discAmt = gross * (s.discount_percent / 100);
+    const lineItems: object[] = [];
+    let sortIdx = 0;
+    for (const sub of clientSubs) {
+      const itemName = (sub.vendor && sub.vendor !== "") ? `${sub.vendor} — ${sub.product_name}` : sub.product_name;
+      const gross = sub.seats * sub.price_per_seat;
       lineItems.push({
         invoice_id: inv.id,
-        item_name: `MSP Package Discount (${s.discount_percent}%)`,
-        description: `Discount applied for managed service clients`,
-        quantity: 1,
-        unit_price: -discAmt,
-        sort_order: 1,
+        item_name: itemName,
+        description: sub.type === "managed_service"
+          ? sub.product_name
+          : `${sub.seats} seat${sub.seats !== 1 ? "s" : ""} × $${sub.price_per_seat.toFixed(2)}/seat`,
+        quantity: sub.seats,
+        unit_price: sub.price_per_seat,
+        sort_order: sortIdx++,
       });
+      if (sub.discount_percent > 0) {
+        const discAmt = gross * (sub.discount_percent / 100);
+        lineItems.push({
+          invoice_id: inv.id,
+          item_name: `MSP Package Discount (${sub.discount_percent}%)`,
+          description: `Discount applied for managed service clients`,
+          quantity: 1,
+          unit_price: -discAmt,
+          sort_order: sortIdx++,
+        });
+      }
     }
     await supabase.from("line_items").insert(lineItems);
+
+    // Mark all of this client's active subs as billed
     await supabase.from("subscriptions")
       .update({ last_billed_at: now.toISOString().split("T")[0] })
-      .eq("id", s.id);
+      .in("id", clientSubs.map(sub => sub.id));
 
     setGeneratingSub(null);
     router.push(`/dashboard/invoices/${inv.id}`);
@@ -383,10 +414,10 @@ export default function SubscriptionsPage() {
                         <div className="flex items-center justify-end gap-3">
                           {s.clients && (
                             <button
-                              onClick={() => generateSingleInvoice(s)}
-                              disabled={generatingSub === s.id}
+                              onClick={() => generateClientInvoice(s)}
+                              disabled={generatingSub === s.clients.id}
                               className="text-xs text-blue-500 hover:text-blue-700 font-medium transition disabled:opacity-50">
-                              {generatingSub === s.id ? "Creating…" : "Generate Invoice"}
+                              {generatingSub === s.clients.id ? "Creating…" : "Generate Invoice"}
                             </button>
                           )}
                           <Link href={`/dashboard/subscriptions/${s.id}/edit`} className="text-xs text-gray-400 hover:text-blue-600 font-medium transition">Edit</Link>
