@@ -16,20 +16,22 @@ type Expense = {
   vendor: string | null;
   category: string;
   amount: number;
+  quantity: number;
   billing_cycle: string;
   notes: string | null;
   status: string;
   start_date: string | null;
 };
 
-const blank = { name: "", vendor: "", category: "Software / SaaS", amount: "", billing_cycle: "monthly", notes: "", start_date: "" };
+const blank = { name: "", vendor: "", category: "Software / SaaS", amount: "", quantity: "1", billing_cycle: "monthly", notes: "", start_date: "" };
 const inputCls = "w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
 const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5";
 
 function monthlyCost(e: Expense) {
-  if (e.billing_cycle === "annual") return e.amount / 12;
+  const qty = e.quantity || 1;
+  if (e.billing_cycle === "annual") return (e.amount * qty) / 12;
   if (e.billing_cycle === "one_time") return 0;
-  return e.amount;
+  return e.amount * qty;
 }
 
 export default function ExpensesPage() {
@@ -52,8 +54,8 @@ export default function ExpensesPage() {
   const active = expenses.filter(e => e.status === "active");
   const shown = expenses.filter(e => e.status === filterStatus);
   const totalMonthly = active.reduce((s, e) => s + monthlyCost(e), 0);
-  const totalAnnual = active.filter(e => e.billing_cycle === "annual").reduce((s, e) => s + e.amount, 0);
-  const totalOneTime = active.filter(e => e.billing_cycle === "one_time").reduce((s, e) => s + e.amount, 0);
+  const totalAnnual = active.filter(e => e.billing_cycle === "annual").reduce((s, e) => s + e.amount * (e.quantity || 1), 0);
+  const totalOneTime = active.filter(e => e.billing_cycle === "one_time").reduce((s, e) => s + e.amount * (e.quantity || 1), 0);
 
   function openNew() {
     setEditingId(null);
@@ -63,7 +65,7 @@ export default function ExpensesPage() {
 
   function openEdit(e: Expense) {
     setEditingId(e.id);
-    setForm({ name: e.name, vendor: e.vendor ?? "", category: e.category, amount: String(e.amount), billing_cycle: e.billing_cycle, notes: e.notes ?? "", start_date: e.start_date ?? "" });
+    setForm({ name: e.name, vendor: e.vendor ?? "", category: e.category, amount: String(e.amount), quantity: String(e.quantity || 1), billing_cycle: e.billing_cycle, notes: e.notes ?? "", start_date: e.start_date ?? "" });
     setShowForm(true);
   }
 
@@ -75,6 +77,7 @@ export default function ExpensesPage() {
       vendor: form.vendor.trim() || null,
       category: form.category,
       amount: parseFloat(form.amount),
+      quantity: parseFloat(form.quantity) || 1,
       billing_cycle: form.billing_cycle,
       notes: form.notes.trim() || null,
       start_date: form.start_date || null,
@@ -163,7 +166,8 @@ export default function ExpensesPage() {
                 <tr>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
-                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Amount</th>
+                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Unit Cost</th>
+                  <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Qty</th>
                   <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Billing</th>
                   <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Monthly Cost</th>
                   <th className="px-6 py-3"></th>
@@ -180,6 +184,7 @@ export default function ExpensesPage() {
                       <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{e.category}</span>
                     </td>
                     <td className="px-6 py-4 text-right text-gray-700 font-medium">${e.amount.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-right text-gray-500">{e.quantity || 1}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                         e.billing_cycle === "monthly" ? "bg-blue-50 text-blue-600" :
@@ -236,8 +241,12 @@ export default function ExpensesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Amount *</label>
+                  <label className={labelCls}>Unit Cost *</label>
                   <input type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} className={inputCls} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className={labelCls}>Quantity</label>
+                  <input type="number" min="1" step="1" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} className={inputCls} placeholder="1" />
                 </div>
                 <div>
                   <label className={labelCls}>Billing Cycle</label>
