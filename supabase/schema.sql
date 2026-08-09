@@ -201,3 +201,20 @@ create policy "Authenticated users can manage line items" on line_items for all 
 -- Document counters
 create policy "Authenticated users can read counters" on document_counters for select using (auth.role() = 'authenticated');
 create policy "Authenticated users can update counters" on document_counters for update using (auth.role() = 'authenticated');
+
+-- Company expenses (internal operating costs)
+create table expenses (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  vendor text,
+  category text not null default 'Other',
+  amount numeric(10,2) not null,
+  billing_cycle text not null default 'monthly' check (billing_cycle in ('monthly', 'annual', 'one_time')),
+  notes text,
+  status text not null default 'active' check (status in ('active', 'cancelled')),
+  start_date date,
+  created_at timestamptz default now()
+);
+
+alter table expenses enable row level security;
+create policy "Authenticated users can manage expenses" on expenses for all using (auth.role() = 'authenticated');
