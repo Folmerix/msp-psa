@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Subscription = {
@@ -23,14 +22,12 @@ type Subscription = {
 };
 
 export default function SubscriptionsPage() {
-  const router = useRouter();
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [billing, setBilling] = useState(false);
   const [billResult, setBillResult] = useState<{ created: number; skipped: number } | null>(null);
   const [filterStatus, setFilterStatus] = useState<"active" | "cancelled">("active");
   const [showBillingModal, setShowBillingModal] = useState(false);
-  const [generatingSub, setGeneratingSub] = useState<string | null>(null);
 
   async function load() {
     const { data } = await supabase
@@ -152,84 +149,6 @@ export default function SubscriptionsPage() {
     setBilling(false);
     setShowBillingModal(false);
     load();
-  }
-
-  async function generateClientInvoice(s: Subscription) {
-    if (!s.clients) return;
-    const clientId = s.clients.id;
-
-    // All active subs for this client (combine into one invoice)
-    const clientSubs = subs.filter(sub => sub.clients?.id === clientId && sub.status === "active");
-    if (clientSubs.length === 0) return;
-
-    setGeneratingSub(clientId);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    // Use max existing invoice number + 1 so deleted invoices don't leave gaps
-    const { data: maxRow } = await supabase
-      .from("invoices")
-      .select("invoice_number")
-      .order("invoice_number", { ascending: false })
-      .limit(1)
-      .single();
-    const lastNum = maxRow?.invoice_number
-      ? parseInt(maxRow.invoice_number.replace(/\D/g, ""), 10)
-      : 0;
-    const invoiceNumber = `INV-${String((isNaN(lastNum) ? 0 : lastNum) + 1).padStart(4, "0")}`;
-
-    const monthLabel = now.toLocaleString("default", { month: "long", year: "numeric" });
-    const subtotal = clientSubs.reduce((sum, sub) => sum + netRevenue(sub), 0);
-
-    const { data: inv, error } = await supabase.from("invoices").insert({
-      invoice_number: invoiceNumber,
-      client_id: clientId,
-      title: `Monthly Subscriptions — ${monthLabel}`,
-      subtotal,
-      tax_rate: 0,
-      tax_amount: 0,
-      total: subtotal,
-      status: "draft",
-      created_by: user?.id ?? null,
-    }).select().single();
-
-    if (error || !inv) { setGeneratingSub(null); return; }
-
-    const lineItems: object[] = [];
-    let sortIdx = 0;
-    for (const sub of clientSubs) {
-      const itemName = (sub.vendor && sub.vendor !== "") ? `${sub.vendor} — ${sub.product_name}` : sub.product_name;
-      const gross = sub.seats * sub.price_per_seat;
-      lineItems.push({
-        invoice_id: inv.id,
-        item_name: itemName,
-        description: sub.type === "managed_service"
-          ? sub.product_name
-          : `${sub.seats} seat${sub.seats !== 1 ? "s" : ""} × $${sub.price_per_seat.toFixed(2)}/seat`,
-        quantity: sub.seats,
-        unit_price: sub.price_per_seat,
-        sort_order: sortIdx++,
-      });
-      if (sub.discount_percent > 0) {
-        const discAmt = gross * (sub.discount_percent / 100);
-        lineItems.push({
-          invoice_id: inv.id,
-          item_name: `MSP Package Discount (${sub.discount_percent}%)`,
-          description: `Discount applied for managed service clients`,
-          quantity: 1,
-          unit_price: -discAmt,
-          sort_order: sortIdx++,
-        });
-      }
-    }
-    await supabase.from("line_items").insert(lineItems);
-
-    // Mark all of this client's active subs as billed
-    await supabase.from("subscriptions")
-      .update({ last_billed_at: now.toISOString().split("T")[0] })
-      .in("id", clientSubs.map(sub => sub.id));
-
-    setGeneratingSub(null);
-    router.push(`/dashboard/invoices/${inv.id}`);
   }
 
   if (loading) return <div className="p-8 text-sm text-gray-400">Loading…</div>;
@@ -411,17 +330,7 @@ export default function SubscriptionsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          {s.clients && (
-                            <button
-                              onClick={() => generateClientInvoice(s)}
-                              disabled={generatingSub === s.clients.id}
-                              className="text-xs text-blue-500 hover:text-blue-700 font-medium transition disabled:opacity-50">
-                              {generatingSub === s.clients.id ? "Creating…" : "Generate Invoice"}
-                            </button>
-                          )}
-                          <Link href={`/dashboard/subscriptions/${s.id}/edit`} className="text-xs text-gray-400 hover:text-blue-600 font-medium transition">Edit</Link>
-                        </div>
+                        <Link href={`/dashboard/subscriptions/${s.id}/edit`} className="text-xs text-gray-400 hover:text-blue-600 font-medium transition">Edit</Link>
                       </td>
                     </tr>
                   );

@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 type Client = { id: string; name: string; email: string | null; phone: string | null; address: string | null; city: string | null; state: string | null; zip: string | null; active: boolean };
 type Ticket = { id: string; title: string; status: string; priority: string; created_at: string };
 type Contract = { id: string; name: string; amount: number; status: string; last_billed_at: string | null };
-type Subscription = { id: string; type: string; vendor: string | null; product_name: string; seats: number; price_per_seat: number; status: string };
+type Subscription = { id: string; type: string; vendor: string | null; product_name: string; seats: number; price_per_seat: number; discount_percent: number; status: string };
 
 const ticketStatusColors: Record<string, string> = {
   open: "bg-red-100 text-red-700",
@@ -30,6 +30,7 @@ export default function ClientDetailPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", city: "", state: "", zip: "" });
   const [saving, setSaving] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
   useEffect(() => {
     supabase.from("clients").select("*").eq("id", id).single().then(({ data }) => {
@@ -42,9 +43,79 @@ export default function ClientDetailPage() {
       .then(({ data }) => setTickets((data as Ticket[]) ?? []));
     supabase.from("contracts").select("id, name, amount, status, last_billed_at").eq("client_id", id).order("created_at", { ascending: false })
       .then(({ data }) => setContracts((data as Contract[]) ?? []));
-    supabase.from("subscriptions").select("id, type, vendor, product_name, seats, price_per_seat, status").eq("client_id", id).eq("status", "active").order("vendor")
+    supabase.from("subscriptions").select("id, type, vendor, product_name, seats, price_per_seat, discount_percent, status").eq("client_id", id).eq("status", "active").order("vendor")
       .then(({ data }) => setSubscriptions((data as Subscription[]) ?? []));
   }, [id]);
+
+  const netRevenue = (s: Subscription) => s.seats * s.price_per_seat * (1 - (s.discount_percent || 0) / 100);
+
+  async function generateInvoice() {
+    if (subscriptions.length === 0) return;
+    setGeneratingInvoice(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: maxRow } = await supabase
+      .from("invoices")
+      .select("invoice_number")
+      .order("invoice_number", { ascending: false })
+      .limit(1)
+      .single();
+    const lastNum = maxRow?.invoice_number ? parseInt(maxRow.invoice_number.replace(/\D/g, ""), 10) : 0;
+    const invoiceNumber = `INV-${String((isNaN(lastNum) ? 0 : lastNum) + 1).padStart(4, "0")}`;
+
+    const now = new Date();
+    const monthLabel = now.toLocaleString("default", { month: "long", year: "numeric" });
+    const subtotal = subscriptions.reduce((sum, s) => sum + netRevenue(s), 0);
+
+    const { data: inv, error } = await supabase.from("invoices").insert({
+      invoice_number: invoiceNumber,
+      client_id: id,
+      title: `Monthly Subscriptions — ${monthLabel}`,
+      subtotal,
+      tax_rate: 0,
+      tax_amount: 0,
+      total: subtotal,
+      status: "draft",
+      created_by: user?.id ?? null,
+    }).select().single();
+
+    if (error || !inv) { setGeneratingInvoice(false); return; }
+
+    const lineItems: object[] = [];
+    let sortIdx = 0;
+    for (const s of subscriptions) {
+      const itemName = (s.vendor && s.vendor !== "") ? `${s.vendor} — ${s.product_name}` : s.product_name;
+      const gross = s.seats * s.price_per_seat;
+      lineItems.push({
+        invoice_id: inv.id,
+        item_name: itemName,
+        description: s.type === "managed_service"
+          ? s.product_name
+          : `${s.seats} seat${s.seats !== 1 ? "s" : ""} × $${s.price_per_seat.toFixed(2)}/seat`,
+        quantity: s.seats,
+        unit_price: s.price_per_seat,
+        sort_order: sortIdx++,
+      });
+      if (s.discount_percent > 0) {
+        const discAmt = gross * (s.discount_percent / 100);
+        lineItems.push({
+          invoice_id: inv.id,
+          item_name: `MSP Package Discount (${s.discount_percent}%)`,
+          description: `Discount applied for managed service clients`,
+          quantity: 1,
+          unit_price: -discAmt,
+          sort_order: sortIdx++,
+        });
+      }
+    }
+    await supabase.from("line_items").insert(lineItems);
+    await supabase.from("subscriptions")
+      .update({ last_billed_at: now.toISOString().split("T")[0] })
+      .in("id", subscriptions.map(s => s.id));
+
+    setGeneratingInvoice(false);
+    router.push(`/dashboard/invoices/${inv.id}`);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault(); setSaving(true);
@@ -153,10 +224,18 @@ export default function ClientDetailPage() {
                 </p>
               )}
             </div>
-            <Link href={`/dashboard/subscriptions/new?client=${id}`}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
-              + Add Subscription
-            </Link>
+            <div className="flex items-center gap-2">
+              {subscriptions.length > 0 && (
+                <button onClick={generateInvoice} disabled={generatingInvoice}
+                  className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50">
+                  {generatingInvoice ? "Creating…" : "Generate Invoice"}
+                </button>
+              )}
+              <Link href={`/dashboard/subscriptions/new?client=${id}`}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+                + Add Subscription
+              </Link>
+            </div>
           </div>
           {subscriptions.length === 0 ? (
             <div className="px-6 py-6 text-center text-sm text-gray-400">No active subscriptions for this client.</div>
